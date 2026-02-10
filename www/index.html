@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Robot Control Console</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #0c1117;
+            color: #f5f5f5;
+            margin: 0;
+            padding: 24px 28px;
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 600;
+            margin: 0 0 6px;
+            color: #e5e7eb;
+        }
+        #subtitle {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-bottom: 18px;
+        }
+        .layout {
+            display: flex;
+            gap: 18px;
+            align-items: flex-start;
+        }
+        .left-column {
+            min-width: 220px;
+            max-width: 260px;
+        }
+        .center-column {
+            flex: 1;
+            min-width: 360px;
+        }
+        .right-column {
+            width: 460px;
+        }
+        .panel {
+            background: #020617;
+            border: 1px solid #1f2937;
+            border-radius: 10px;
+            padding: 14px 16px 16px;
+            margin-bottom: 14px;
+        }
+        .panel h2 {
+            margin: 0 0 10px;
+            font-size: 15px;
+            font-weight: 500;
+            color: #e5e7eb;
+        }
+        .controls-column {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .controls-column button,
+        .controls-grid button {
+            padding: 7px 10px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: 1px solid #374151;
+            background: #111827;
+            color: #e5e7eb;
+            text-align: left;
+            cursor: pointer;
+        }
+        .controls-column button span.key,
+        .controls-grid button span.key {
+            color: #9ca3af;
+            font-size: 11px;
+            margin-left: 6px;
+        }
+        .controls-column button:hover,
+        .controls-grid button:hover {
+            background: #1f2937;
+        }
+        #tankCanvasWrapper {
+            width: 440px;
+            height: 260px;
+            margin: 0 auto 10px;
+            border-radius: 10px;
+            background: radial-gradient(circle at 20% 10%, #1f2937, #020617 70%);
+            border: 1px solid #1f2937;
+        }
+        #tankCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Инфо по симуляции — более читаемо и в два столбца */
+        .sim-info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 4px 12px;
+            font-size: 12px;
+            margin-top: 6px;
+        }
+        .sim-info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+        .sim-info-label {
+            color: #d1d5db;
+            margin-right: 6px;
+        }
+        .sim-info-value {
+            color: #e5e7eb;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .slider-row {
+            margin: 5px 0;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+        .slider-row label {
+            display: inline-block;
+            min-width: 140px;
+            color: #d1d5db;
+        }
+        input[type="range"] {
+            flex: 1;
+        }
+        .value-label {
+            display: inline-block;
+            min-width: 52px;
+            text-align: right;
+            color: #e5e7eb;
+            font-variant-numeric: tabular-nums;
+        }
+        #gamepadStatus {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        .hint {
+            margin-top: 6px;
+            font-size: 11px;
+            color: #6b7280;
+        }
+
+        /* Камеры — центр */
+        .cameras-column-panel {
+            height: 100%;
+        }
+        .cameras-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 4px;
+        }
+        .camera-box {
+            flex: 1;
+            min-height: 180px;
+            background: #020617;
+            border-radius: 8px;
+            border: 1px solid #1f2937;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+        }
+        .camera-title {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 4px;
+        }
+        .camera-view {
+            flex: 1;
+            background: #030712;
+            border-radius: 6px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .camera-view img {
+            max-width: 100%;
+            max-height: 260px;
+            display: block;
+        }
+        .camera-status {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #6b7280;
+        }
+
+        .sensor-row {
+            font-size: 12px;
+            color: #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            margin: 2px 0;
+        }
+        .sensor-label {
+            color: #9ca3af;
+        }
+
+        /* Грид управления по модулям */
+        .controls-grid {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+        .controls-group {
+            flex: 1;
+            min-width: 140px;
+        }
+        .controls-group-title {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 4px;
+        }
+
+        /* Тумблер в стиле интерфейса */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #e5e7eb;
+            gap: 8px;
+        }
+        .toggle-label-text {
+            color: #9ca3af;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 22px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #111827;
+            border-radius: 999px;
+            border: 1px solid #374151;
+            transition: background-color 0.2s ease;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 2px;
+            background-color: #e5e7eb;
+            border-radius: 50%;
+            transition: transform 0.2s ease;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #15803d;
+            border-color: #15803d;
+        }
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        .sim-buttons-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            gap: 8px;
+        }
+        .sim-buttons-row .btn-reset {
+            padding: 7px 10px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: 1px solid #374151;
+            background: #111827;
+            color: #e5e7eb;
+            text-align: center;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .sim-buttons-row .btn-reset:hover {
+            background: #1f2937;
+        }
+    </style>
+</head>
+<body>
+    <h1>Robot Control Console</h1>
+    <div id="subtitle">Network teleoperation panel</div>
+
+    <div class="layout">
+        <!-- ЛЕВАЯ КОЛОНКА: датчики -->
+        <div class="left-column">
+            <div class="panel">
+                <h2>Sensors</h2>
+
+                <!-- Система -->
+                <div class="sensor-row">
+                    <span class="sensor-label">CPU temp:</span>
+                    <span id="sensorCpuTemp">-- °C</span>
+                </div>
+                <div class="sensor-row">
+                    <span class="sensor-label">CPU load:</span>
+                    <span id="sensorCpuLoad">-- %</span>
+                </div>
+                <div class="sensor-row">
+                    <span class="sensor-label">Board temp:</span>
+                    <span id="sensorBoardTemp">-- °C</span>
+                </div>
+
+                <!-- Питание / токи -->
+                <div class="sensor-row">
+                    <span class="sensor-label">Battery:</span>
+                    <span id="sensorBattery">-- V</span>
+                </div>
+                <div class="sensor-row">
+                    <span class="sensor-label">Current total:</span>
+                    <span id="sensorCurrent">-- A</span>
+                </div>
+                <div class="sensor-row">
+                    <span class="sensor-label">5V rail current:</span>
+                    <span id="sensor5VCurrent">-- A</span>
+                </div>
+                <div class="sensor-row">
+                    <span class="sensor-label">12V rail current:</span>
+                    <span id="sensor12VCurrent">-- A</span>
+                </div>
+                <div class="sensor-row">
+                    <span class="sensor-label">Motor driver current:</span>
+                    <span id="sensorMotorCurrent">-- A</span>
+                </div>
+                <div class="sensor-row">
+                    <span class="sensor-label">GPIO pin current:</span>
+                    <span id="sensorGpioCurrent">-- mA</span>
+                </div>
+
+                <!-- Связь -->
+                <div class="sensor-row">
+                    <span class="sensor-label">Wi‑Fi RSSI:</span>
+                    <span id="sensorWifi">-- dBm</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Network</h2>
+                <div class="controls-column">
+                    <button id="btnRefreshStatus">Refresh status</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ЦЕНТРАЛЬНАЯ КОЛОНКА: КАМЕРЫ + УПРАВЛЕНИЕ -->
+        <div class="center-column">
+            <div class="panel cameras-column-panel">
+                <h2>Cameras</h2>
+                <div class="cameras-row">
+                    <div class="camera-box">
+                        <div class="camera-title">Stereo camera</div>
+                        <div class="camera-view">
+                            <img id="stereoCameraImg" src="" alt="Stereo camera feed">
+                        </div>
+                        <div class="camera-status" id="stereoCameraStatus">Stereo: idle</div>
+                    </div>
+                    <div class="camera-box">
+                        <div class="camera-title">CSI camera</div>
+                        <div class="camera-view">
+                            <img id="csiCameraImg" src="" alt="CSI camera feed">
+                        </div>
+                        <div class="camera-status" id="csiCameraStatus">CSI: idle</div>
+                    </div>
+                </div>
+
+                <!-- КНОПКИ УПРАВЛЕНИЯ ПОД КАМЕРАМИ, РАЗБИТЫЕ ПО МОДУЛЯМ -->
+                <div class="panel" style="margin-top:10px;">
+                    <h2>Controls</h2>
+                    <div class="controls-grid">
+                        <div class="controls-group">
+                            <div class="controls-group-title">Base</div>
+                            <button id="btnBaseForward">Forward<span class="key">LS ↑</span></button>
+                            <button id="btnBaseBack">Back<span class="key">LS ↓</span></button>
+                            <button id="btnBaseLeft">Rotate left<span class="key">LS ←</span></button>
+                            <button id="btnBaseRight">Rotate right<span class="key">LS →</span></button>
+                            <button id="btnBaseStop">Stop<span class="key">LS center</span></button>
+                        </div>
+                        <div class="controls-group">
+                            <div class="controls-group-title">Turret</div>
+                            <button id="btnTurretLeft">Turret left<span class="key">RS ←</span></button>
+                            <button id="btnTurretRight">Turret right<span class="key">RS →</span></button>
+                        </div>
+                        <div class="controls-group">
+                            <div class="controls-group-title">Arm</div>
+                            <button id="btnArmExtend">Arm extend<span class="key">RS ↓</span></button>
+                            <button id="btnArmRetract">Arm retract<span class="key">RS ↑</span></button>
+                        </div>
+                        <div class="controls-group">
+                            <div class="controls-group-title">Gripper</div>
+                            <button id="btnGripClose">Gripper close<span class="key">RT</span></button>
+                            <button id="btnGripOpen">Gripper open<span class="key">LT</span></button>
+                        </div>
+                    </div>
+                    <div class="hint">
+                        Gamepad: Left stick – base; Right stick – turret/arm; Triggers – gripper.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ПРАВАЯ КОЛОНКА: СИМУЛЯЦИЯ -->
+        <div class="right-column">
+            <div class="panel">
+                <h2>Vehicle and manipulator</h2>
+                <div id="tankCanvasWrapper">
+                    <canvas id="tankCanvas" width="440" height="260"></canvas>
+                </div>
+
+                <div class="sim-info-grid">
+                    <div class="sim-info-item">
+                        <span class="sim-info-label">Linear speed:</span>
+                        <span class="sim-info-value"><span id="vLinearLabel">0.00</span> m/s</span>
+                    </div>
+                    <div class="sim-info-item">
+                        <span class="sim-info-label">Angular speed:</span>
+                        <span class="sim-info-value"><span id="vAngularLabel">0.0</span> °/s</span>
+                    </div>
+                    <div class="sim-info-item">
+                        <span class="sim-info-label">Turret angle (θ₁):</span>
+                        <span class="sim-info-value"><span id="turretAngleLabel">0.0</span> °</span>
+                    </div>
+                    <div class="sim-info-item">
+                        <span class="sim-info-label">Arm extension:</span>
+                        <span class="sim-info-value"><span id="armExtendLabel">50.0</span> %</span>
+                    </div>
+                    <div class="sim-info-item">
+                        <span class="sim-info-label">Gripper:</span>
+                        <span class="sim-info-value"><span id="gripperLabel">30.0</span> %</span>
+                    </div>
+                </div>
+
+                <div class="slider-row">
+                    <label for="vLinear">Linear speed:</label>
+                    <input type="range" id="vLinear" min="-1.0" max="1.0" step="0.01" value="0">
+                    <span class="value-label" id="vLinearVal">0.00</span>
+                </div>
+                <div class="slider-row">
+                    <label for="vAngular">Angular speed:</label>
+                    <input type="range" id="vAngular" min="-90" max="90" step="1" value="0">
+                    <span class="value-label" id="vAngularVal">0</span>
+                </div>
+                <div class="slider-row">
+                    <label for="turretAngle">Turret angle (θ₁):</label>
+                    <input type="range" id="turretAngle" min="-180" max="180" step="1" value="0">
+                    <span class="value-label" id="turretAngleVal">0</span>
+                </div>
+                <div class="slider-row">
+                    <label for="armExtend">Arm extension:</label>
+                    <input type="range" id="armExtend" min="0" max="100" step="1" value="50">
+                    <span class="value-label" id="armExtendVal">50</span>
+                </div>
+                <div class="slider-row">
+                    <label for="gripper">Gripper:</label>
+                    <input type="range" id="gripper" min="0" max="100" step="1" value="30">
+                    <span class="value-label" id="gripperVal">30</span>
+                </div>
+
+                <div class="sim-buttons-row">
+                    <button id="btnResetSim" class="btn-reset">Reset pose</button>
+                    <div class="toggle-row">
+                        <span class="toggle-label-text">Local simulation</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="chkSimulation">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="gamepadStatus">Gamepad: not connected</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/cameras.js"></script>
+</body>
+</html>
