@@ -7,6 +7,8 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDir>
+
 
 static QByteArray httpResponse(const QByteArray &body,
                                const QByteArray &contentType,
@@ -96,8 +98,14 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     if (headerEnd >= 0 && headerEnd + 4 < request.size())
         body = request.mid(headerEnd + 4);
 
-    const QString wwwRoot =
+    QString wwwRoot =
         QCoreApplication::applicationDirPath() + QStringLiteral("/www");
+
+    // Если запускаем из корня проекта (Sanhum.exe рядом с src/, www/),
+    // то рядом с exe может не быть папки www – пробуем соседний каталог
+    if (!QDir(wwwRoot).exists()) {
+        wwwRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/../www");
+    }
 
     // Статический index.html
     if (method == "GET" && (path == "/" || path == "/index.html")) {
