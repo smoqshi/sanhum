@@ -1,27 +1,32 @@
-Httpserver.cpp
-#include "HttpServer.h"
-#include <QFile>
-#include <QDir>
-#include <QJsonDocument>
-#include <QCoreApplication>
+#include "httpserver.h"
 
-    static QByteArray httpResponse(const QByteArray &body,
-                                   const QByteArray &contentType,
-                                   int statusCode = 200,
-                                   const QByteArray &statusText = "OK")
+#include <QCoreApplication>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QHostAddress>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+
+static QByteArray httpResponse(const QByteArray &body,
+                               const QByteArray &contentType,
+                               int statusCode = 200,
+                               const QByteArray &statusText = "OK")
 {
     QByteArray resp;
     resp.reserve(128 + body.size());
+
     resp += "HTTP/1.1 ";
     resp += QByteArray::number(statusCode);
     resp += " ";
     resp += statusText;
-    resp += "\\r\\nConnection: close\\r\\nContent-Type: ";
+    resp += "\r\nConnection: close\r\nContent-Type: ";
     resp += contentType;
-    resp += "\\r\\nContent-Length: ";
+    resp += "\r\nContent-Length: ";
     resp += QByteArray::number(body.size());
-    resp += "\\r\\n\\r\\n";
+    resp += "\r\n\r\n";
     resp += body;
+
     return resp;
 }
 
@@ -52,7 +57,8 @@ void HttpServer::onNewConnection()
 void HttpServer::onReadyRead()
 {
     QTcpSocket *socket = qobject_cast<QTcpSocket *>(sender());
-    if (!socket) return;
+    if (!socket)
+        return;
 
     const QByteArray req = socket->readAll();
     handleRequest(socket, req);
@@ -67,7 +73,7 @@ void HttpServer::onDisconnected()
 
 void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
 {
-    const int firstLineEnd = request.indexOf("\\r\\n");
+    const int firstLineEnd = request.indexOf("\r\n");
     if (firstLineEnd < 0) {
         socket->write(httpResponse("Bad Request", "text/plain", 400, "Bad Request"));
         socket->disconnectFromHost();
@@ -86,17 +92,19 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     const QByteArray path   = parts[1];
 
     QByteArray body;
-    const int headerEnd = request.indexOf("\\r\\n\\r\\n");
+    const int headerEnd = request.indexOf("\r\n\r\n");
     if (headerEnd >= 0 && headerEnd + 4 < request.size())
         body = request.mid(headerEnd + 4);
 
     const QString wwwRoot =
         QCoreApplication::applicationDirPath() + QStringLiteral("/www");
 
+    // Статический index.html
     if (method == "GET" && (path == "/" || path == "/index.html")) {
         QFile f(wwwRoot + "/index.html");
         if (!f.open(QIODevice::ReadOnly)) {
-            socket->write(httpResponse("index.html not found", "text/plain", 404, "Not Found"));
+            socket->write(httpResponse("index.html not found",
+                                       "text/plain", 404, "Not Found"));
         } else {
             const QByteArray data = f.readAll();
             socket->write(httpResponse(data, "text/html"));
@@ -105,11 +113,13 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
+    // Статические js
     if (method == "GET" && path.startsWith("/js/")) {
-        const QString name = QString::fromUtf8(path.mid(4));
+        const QString name = QString::fromUtf8(path.mid(4)); // без "/js/"
         QFile f(wwwRoot + "/js/" + name);
         if (!f.open(QIODevice::ReadOnly)) {
-            socket->write(httpResponse("js not found", "text/plain", 404, "Not Found"));
+            socket->write(httpResponse("js not found",
+                                       "text/plain", 404, "Not Found"));
         } else {
             const QByteArray data = f.readAll();
             socket->write(httpResponse(data, "application/javascript"));
@@ -118,6 +128,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
+    // ----- API: status -----
     if (method == "GET" && path == "/api/status") {
         const QJsonDocument doc(m_model->makeStatusJson());
         const QByteArray data = doc.toJson(QJsonDocument::Compact);
@@ -126,6 +137,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
+    // ----- API: joint_state -----
     if (method == "GET" && path == "/api/joint_state") {
         const QJsonDocument doc(m_model->makeJointStateJson());
         const QByteArray data = doc.toJson(QJsonDocument::Compact);
@@ -137,18 +149,23 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     // ----- API: base -----
     if (method == "POST" && path == "/api/base") {
         const QJsonDocument doc = QJsonDocument::fromJson(body);
-        const QJsonObject obj = doc.object();
+        const QJsonObject  obj = doc.object();
 
-        const bool emergency = obj.value("emergency").toBool(false);
+        const bool emergency = obj.value(QStringLiteral("emergency")).toBool(false);
         if (emergency) {
             m_model->emergencyStop();
         } else {
-            const double vLin = obj.value("vLinear").toDouble();
-            const double vAng = obj.value("vAngular").toDouble();
+            const double vLin = obj.value(QStringLiteral("vLinear")).toDouble();
+            const double vAng = obj.value(QStringLiteral("vAngular")).toDouble();
             m_model->setBaseCommand(vLin, vAng);
         }
 
-        socket->write(httpResponse("{\\"ok\\":true}", "application/json"));
+        QJsonObject reply;
+        reply.insert(QStringLiteral("ok"), true);
+        const QByteArray data =
+            QJsonDocument(reply).toJson(QJsonDocument::Compact);
+
+        socket->write(httpResponse(data, "application/json"));
         socket->disconnectFromHost();
         return;
     }
@@ -156,19 +173,28 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     // ----- API: arm -----
     if (method == "POST" && path == "/api/arm") {
         const QJsonDocument doc = QJsonDocument::fromJson(body);
-        const QJsonObject obj = doc.object();
-        const double ext    = obj.value("extend").toDouble();
-        const double grip   = obj.value("gripper").toDouble();
-        const double turret = obj.value("turretAngle").toDouble();
+        const QJsonObject  obj = doc.object();
+
+        const double ext    = obj.value(QStringLiteral("extend")).toDouble();
+        const double grip   = obj.value(QStringLiteral("gripper")).toDouble();
+        const double turret = obj.value(QStringLiteral("turretAngle")).toDouble();
+
         m_model->setArmExtension(ext);
         m_model->setGripper(grip);
         m_model->setTurretAngle(turret);
-        socket->write(httpResponse("{\\"ok\\":true}", "application/json"));
+
+        QJsonObject reply;
+        reply.insert(QStringLiteral("ok"), true);
+        const QByteArray data =
+            QJsonDocument(reply).toJson(QJsonDocument::Compact);
+
+        socket->write(httpResponse(data, "application/json"));
         socket->disconnectFromHost();
         return;
     }
 
-    socket->write(httpResponse("404 from default handler", "text/plain", 404, "Not Found"));
+    // Неизвестный маршрут
+    socket->write(httpResponse("404 from default handler",
+                               "text/plain", 404, "Not Found"));
     socket->disconnectFromHost();
-}
 }

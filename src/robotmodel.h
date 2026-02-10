@@ -1,67 +1,50 @@
-#pragma once
+#ifndef ROBOTMODEL_H
+#define ROBOTMODEL_H
 
 #include <QObject>
-#include <QMutex>
 #include <QJsonObject>
-#include "MotorDriver.h"
 
-    struct BaseState {
-    double x {0.0};
-    double y {0.0};
-    double heading {0.0};   // rad
-    double vLinear {0.0};   // m/s
-    double vAngular {0.0};  // rad/s
-};
+#include "motordriver.h"
 
-struct ArmState {
-    double q1 {0.0};
-    double q2 {0.0};
-    double q3 {0.0};
-    double q4 {0.0};
-    double gripper {0.3};   // 0..1
-};
-
-class RobotModel : public QObject {
+// Модель мобильного робота и манипулятора
+class RobotModel : public QObject
+{
     Q_OBJECT
 public:
     explicit RobotModel(QObject *parent = nullptr);
+    ~RobotModel();
 
-    void setBaseCommand(double vLinear, double vAngular);
-    void setArmExtension(double ext);        // 0..1
-    void setGripper(double val);             // 0..1
-    void setTurretAngle(double angleRad);
-
-    // экстренный тормоз
+    // База
     void emergencyStop();
+    void setBaseCommand(double v, double w);      // v [м/с], w [рад/с]
+    void step(double dt);                         // шаг интегратора
 
-    BaseState baseState() const;
-    ArmState armState() const;
+    // Манипулятор + эффектор
+    void setArmExtension(double ext01);           // [0..1]
+    void setGripper(double grip01);              // [0..1]
+    void setTurretAngle(double angleDeg);        // [град]
 
+    // Формирование JSON для web‑клиента
     QJsonObject makeStatusJson() const;
     QJsonObject makeJointStateJson() const;
 
-public slots:
-    void step(double dt);
-
-signals:
-    void statusChanged();
-
 private:
-    mutable QMutex m_stateMutex;
-    QMutex m_hardwareMutex;
-
-    BaseState m_base;
-    ArmState  m_arm;
-
-    double m_turretAngle {0.0};
-    double m_armExtend   {0.5};
-
-    double m_vLinearCmd  {0.0};
-    double m_vAngularCmd {0.0};
-
-    static constexpr double WHEELBASE    = 0.35;  // m
-    static constexpr double WHEEL_RADIUS = 0.05;  // m
-    static constexpr double MAX_OMEGA    = 10.0;  // rad/s
-
     MotorDriver m_motorDriver;
+
+    // База
+    bool   m_emergency;
+    double m_v;           // линейная скорость, м/с
+    double m_w;           // угловая скорость, рад/с
+
+    // Состояние манипулятора
+    double m_ext;         // [0..1] относительное выдвижение
+    double m_grip;        // [0..1] захват
+    double m_turretDeg;   // [град]
+
+    // датчики / служебные поля (заглушки)
+    double m_batteryV;
+    double m_cpuTemp;
+    double m_boardTemp;
 };
+
+#endif // ROBOTMODEL_H

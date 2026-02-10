@@ -4,12 +4,12 @@
 #include <QTimer>
 #include <atomic>
 
-    // Направление мотора
-    enum class MotorDirection {
-        Stop,
-        Forward,
-        Backward
-    };
+// Направление мотора
+enum class MotorDirection {
+    Stop,
+    Forward,
+    Backward
+};
 
 class MotorDriver : public QObject
 {
@@ -24,7 +24,7 @@ public:
     void setRightMotor(MotorDirection dir, int speed_percent);
 
 private slots:
-    void pwmTick();  // периодический тик софт‑PWM
+    void pwmTick(); // периодический тик софт‑PWM
 
 private:
     // ===== НОМЕРА GPIO (ПОДСТАВЬ СВОИ, ЕСЛИ ДРУГИЕ) =====
@@ -40,22 +40,25 @@ private:
     int m_rightFdIn2;
 
     // Параметры PWM
-    std::atomic<int> m_leftDuty;   // 0..100
-    std::atomic<int> m_rightDuty;  // 0..100
+    std::atomic<int>          m_leftDuty;   // 0..100
+    std::atomic<int>          m_rightDuty;  // 0..100
     std::atomic<MotorDirection> m_leftDir;
     std::atomic<MotorDirection> m_rightDir;
 
-    int m_phase;      // 0..99 – фаза PWM
+    int    m_phase;    // 0..99 – фаза PWM
     QTimer m_pwmTimer;
 
     // Вспомогательные методы работы с sysfs GPIO
-    int exportGpio(int gpio);
-    int setGpioDirection(int gpio, bool output);
-    int openGpioValue(int gpio);
+    int  exportGpio(int gpio);
+    int  setGpioDirection(int gpio, bool output);
+    int  openGpioValue(int gpio);
     void writeGpio(int fd, bool value);
 
     // Применить один шаг PWM к конкретному мосту
-    void applyPhaseForMotor(int fdA, int fdB,
+    void applyPhaseForMotor(int fdA,
+                            int fdB,
                             MotorDirection dir,
-                            int duty, int phase);
+                            int duty,
+                            int phase);
 };
+

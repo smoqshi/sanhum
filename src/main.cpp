@@ -1,21 +1,25 @@
 #include <QCoreApplication>
 #include <QTimer>
-#include "RobotModel.h"
-#include "HttpServer.h"
 
-    int main(int argc, char *argv[])
+#include "robotmodel.h"
+#include "httpserver.h"
+
+int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
 
     RobotModel model;
     HttpServer server(&model);
 
-    if (!server.listen(8080))
+    // слушаем на 8080
+    if (!server.listen(8080)) {
         qFatal("Failed to listen on port 8080");
+    }
 
+    // шаг интегратора модели
     QTimer timer;
     QObject::connect(&timer, &QTimer::timeout, [&model]() {
-        constexpr double dt = 0.02;
+        constexpr double dt = 0.02;  // 20 мс
         model.step(dt);
     });
     timer.start(20);

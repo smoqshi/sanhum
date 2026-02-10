@@ -1,25 +1,31 @@
-QT       += core network
-CONFIG   += console c++17
-CONFIG   -= app_bundle
+QT += core network gui
 
-# libgpiod для Raspberry Pi 5
-LIBS += -lgpiodcxx -lgpiod
+CONFIG += c++17 console
+CONFIG -= app_bundle
 
+TARGET = Sanhum
 TEMPLATE = app
-TARGET   = Sanhum
 
 SOURCES += \
-    src/armkinematics.cpp \
-    src/httpserver.cpp \
     src/main.cpp \
+    src/httpserver.cpp \
+    src/robotmodel.cpp \
     src/motordriver.cpp \
-    src/robotmodel.cpp
+    src/armkinematics.cpp
 
 HEADERS += \
-    src/armkinematics.h \
     src/httpserver.h \
+    src/robotmodel.h \
     src/motordriver.h \
-    src/robotmodel.h
+    src/armkinematics.h
+
+# Платформо-зависимые библиотеки
+win32 {
+    # под Windows libgpiod нет – не линкуем
+} else {
+    # под Linux линкуем libgpiod/libgpiodcxx
+    LIBS += -lgpiodcxx -lgpiod
+}
 
 DISTFILES += \
     www/index.html \

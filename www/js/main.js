@@ -1,4 +1,3 @@
-main.js
 import { initNetwork, pollStatus } from './network.js';
 import { initChassis, drawChassis, updateBase } from './chassis.js';
 import { initManipulator, drawManipulator } from './manipulator.js';
