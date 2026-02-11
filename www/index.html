@@ -9,151 +9,107 @@
             background: #0c1117;
             color: #f5f5f5;
             margin: 0;
-            padding: 24px 28px;
+            padding: 20px 24px;
+            box-sizing: border-box;
+        }
+        * {
+            box-sizing: inherit;
         }
         h1 {
-            font-size: 26px;
+            font-size: 24px;
             font-weight: 600;
-            margin: 0 0 6px;
+            margin: 0 0 4px;
             color: #e5e7eb;
+            text-align: center;
         }
         #subtitle {
-            font-size: 13px;
+            font-size: 12px;
             color: #9ca3af;
-            margin-bottom: 18px;
+            margin: 0 0 16px;
+            text-align: center;
         }
         .layout {
             display: flex;
-            gap: 18px;
+            gap: 16px;
             align-items: flex-start;
+            max-width: 1200px;
+            margin: 0 auto;
         }
         .left-column {
-            min-width: 220px;
-            max-width: 260px;
+            flex: 0 0 240px;
         }
         .center-column {
-            flex: 1;
+            flex: 1 1 0;
             min-width: 360px;
         }
         .right-column {
-            width: 460px;
+            flex: 0 0 340px;
         }
         .panel {
             background: #020617;
             border: 1px solid #1f2937;
             border-radius: 10px;
-            padding: 14px 16px 16px;
-            margin-bottom: 14px;
+            padding: 12px 14px 14px;
+            margin-bottom: 12px;
         }
         .panel h2 {
-            margin: 0 0 10px;
-            font-size: 15px;
+            margin: 0 0 8px;
+            font-size: 14px;
             font-weight: 500;
             color: #e5e7eb;
         }
-        .controls-column {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .controls-column button,
-        .controls-grid button {
-            padding: 7px 10px;
-            font-size: 13px;
-            border-radius: 6px;
-            border: 1px solid #374151;
-            background: #111827;
-            color: #e5e7eb;
-            text-align: left;
-            cursor: pointer;
-        }
-        .controls-column button span.key,
-        .controls-grid button span.key {
-            color: #9ca3af;
-            font-size: 11px;
-            margin-left: 6px;
-        }
-        .controls-column button:hover,
-        .controls-grid button:hover {
-            background: #1f2937;
-        }
-        #tankCanvasWrapper {
-            width: 440px;
-            height: 260px;
-            margin: 0 auto 10px;
-            border-radius: 10px;
-            background: radial-gradient(circle at 20% 10%, #1f2937, #020617 70%);
-            border: 1px solid #1f2937;
-        }
-        #tankCanvas {
-            width: 100%;
-            height: 100%;
-        }
-        .sim-info-grid {
+
+        /* Status / Network */
+        .status-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 4px 12px;
-            font-size: 12px;
+            grid-template-columns: minmax(0, 1fr);
+            row-gap: 3px;
+            font-size: 11px;
             margin-top: 6px;
         }
-        .sim-info-item {
+        .status-row {
             display: flex;
             justify-content: space-between;
             align-items: baseline;
         }
-        .sim-info-label {
-            color: #d1d5db;
+        .status-label {
+            color: #9ca3af;
             margin-right: 6px;
         }
-        .sim-info-value {
+        .status-value {
             color: #e5e7eb;
             font-variant-numeric: tabular-nums;
         }
-        .slider-row {
-            margin: 5px 0;
-            font-size: 12px;
-            display: flex;
+        #btnRefreshStatus {
+            display: inline-flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 6px;
-        }
-        .slider-row label {
-            display: inline-block;
-            min-width: 140px;
-            color: #d1d5db;
-        }
-        input[type="range"] {
-            flex: 1;
-        }
-        .value-label {
-            display: inline-block;
-            min-width: 52px;
-            text-align: right;
-            color: #e5e7eb;
-            font-variant-numeric: tabular-nums;
-        }
-        #gamepadStatus {
-            margin-top: 6px;
-            font-size: 12px;
-            color: #9ca3af;
-        }
-        .hint {
-            margin-top: 6px;
+            justify-content: center;
+            padding: 4px 8px;
             font-size: 11px;
-            color: #6b7280;
+            border-radius: 6px;
+            border: 1px solid #374151;
+            background: #111827;
+            color: #e5e7eb;
+            cursor: pointer;
+            margin-bottom: 6px;
         }
+        #btnRefreshStatus:hover {
+            background: #1f2937;
+        }
+
+        /* Cameras */
         .cameras-column-panel {
-            height: 100%;
+            width: 100%;
         }
         .cameras-row {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            margin-top: 4px;
+            gap: 8px;
+            margin-top: 2px;
         }
         .camera-box {
             flex: 1;
-            min-height: 180px;
+            min-height: 160px;
             background: #020617;
             border-radius: 8px;
             border: 1px solid #1f2937;
@@ -162,7 +118,7 @@
             flex-direction: column;
         }
         .camera-title {
-            font-size: 12px;
+            font-size: 11px;
             color: #9ca3af;
             margin-bottom: 4px;
         }
@@ -174,50 +130,163 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
         }
         .camera-view img {
             max-width: 100%;
-            max-height: 260px;
+            max-height: 220px;
             display: block;
         }
-        .camera-status {
-            margin-top: 4px;
-            font-size: 11px;
+        .no-signal {
+            position: absolute;
             color: #6b7280;
+            font-size: 11px;
         }
-        .sensor-row {
-            font-size: 12px;
-            color: #e5e7eb;
-            display: flex;
-            justify-content: space-between;
-            margin: 2px 0;
+        .camera-status {
+            margin-top: 3px;
+            font-size: 10px;
+            color: #6b7280;
+            text-align: center;
         }
-        .sensor-label {
-            color: #9ca3af;
+        .hint {
+            margin-top: 6px;
+            font-size: 10px;
+            color: #6b7280;
+            text-align: center;
         }
+
+        /* Compact Controls */
         .controls-grid {
             display: flex;
-            gap: 10px;
+            gap: 6px;
             flex-wrap: wrap;
             margin-top: 4px;
         }
         .controls-group {
-            flex: 1;
-            min-width: 140px;
+            flex: 1 1 130px;
         }
         .controls-group-title {
-            font-size: 12px;
+            font-size: 11px;
             color: #9ca3af;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
+        }
+        .controls-column {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 3px 4px;
+        }
+        .controls-column button {
+            padding: 3px 4px;
+            font-size: 10px;
+            border-radius: 4px;
+            border: 1px solid #374151;
+            background: #111827;
+            color: #e5e7eb;
+            text-align: left;
+            cursor: pointer;
+            line-height: 1.2;
+        }
+        .controls-column button span.key {
+            color: #9ca3af;
+            font-size: 9px;
+            margin-left: 3px;
+        }
+        .controls-column button:hover {
+            background: #1f2937;
+        }
+        #gamepadStatus {
+            margin-top: 4px;
+            font-size: 10px;
+            color: #9ca3af;
+            text-align: right;
+        }
+
+        /* Vehicle / simulation */
+        .sim-canvas-wrapper {
+            width: 100%;
+            height: 200px;
+            border-radius: 10px;
+            background: radial-gradient(circle at 20% 10%, #1f2937, #020617 70%);
+            border: 1px solid #1f2937;
+            margin-bottom: 8px;
+            overflow: hidden;
+        }
+        #simCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .sim-info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 3px 10px;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .sim-info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+        .sim-info-label {
+            color: #d1d5db;
+            margin-right: 4px;
+        }
+        .sim-info-value {
+            color: #e5e7eb;
+            font-variant-numeric: tabular-nums;
+        }
+        .slider-row {
+            margin: 4px 0;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+        }
+        .slider-row label {
+            display: inline-block;
+            min-width: 120px;
+            color: #d1d5db;
+        }
+        input[type="range"] {
+            flex: 1;
+        }
+        .value-label {
+            display: inline-block;
+            min-width: 44px;
+            text-align: right;
+            color: #e5e7eb;
+            font-variant-numeric: tabular-nums;
+        }
+        .sim-buttons-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 6px;
+            gap: 6px;
+        }
+        .sim-buttons-row .btn-reset {
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: 6px;
+            border: 1px solid #374151;
+            background: #111827;
+            color: #e5e7eb;
+            text-align: center;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .sim-buttons-row .btn-reset:hover {
+            background: #1f2937;
         }
         .toggle-row {
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            margin-top: 6px;
-            font-size: 12px;
+            font-size: 11px;
             color: #e5e7eb;
-            gap: 8px;
+            gap: 6px;
         }
         .toggle-label-text {
             color: #9ca3af;
@@ -225,8 +294,8 @@
         .toggle-switch {
             position: relative;
             display: inline-block;
-            width: 46px;
-            height: 22px;
+            width: 42px;
+            height: 20px;
         }
         .toggle-switch input {
             opacity: 0;
@@ -248,8 +317,8 @@
         .toggle-slider:before {
             position: absolute;
             content: "";
-            height: 16px;
-            width: 16px;
+            height: 14px;
+            width: 14px;
             left: 3px;
             bottom: 2px;
             background-color: #e5e7eb;
@@ -261,28 +330,7 @@
             border-color: #15803d;
         }
         .toggle-switch input:checked + .toggle-slider:before {
-            transform: translateX(20px);
-        }
-        .sim-buttons-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 8px;
-            gap: 8px;
-        }
-        .sim-buttons-row .btn-reset {
-            padding: 7px 10px;
-            font-size: 13px;
-            border-radius: 6px;
-            border: 1px solid #374151;
-            background: #111827;
-            color: #e5e7eb;
-            text-align: center;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-        .sim-buttons-row .btn-reset:hover {
-            background: #1f2937;
+            transform: translateX(18px);
         }
     </style>
 </head>
@@ -292,80 +340,85 @@
 <div id="subtitle">Network teleoperation panel</div>
 
 <div class="layout">
+    <!-- Левая колонка: статус/сеть -->
     <div class="left-column">
         <div class="panel">
-            <h2>Sensors</h2>
-            <div class="sensor-row">
-                <span class="sensor-label">CPU temp:</span>
-                <span class="sensor-value">-- °C</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">CPU load:</span>
-                <span class="sensor-value">-- %</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">Board temp:</span>
-                <span class="sensor-value">-- °C</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">Battery:</span>
-                <span class="sensor-value">-- V</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">Current total:</span>
-                <span class="sensor-value">-- A</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">5V rail current:</span>
-                <span class="sensor-value">-- A</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">12V rail current:</span>
-                <span class="sensor-value">-- A</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">Motor driver current:</span>
-                <span class="sensor-value">-- A</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">GPIO pin current:</span>
-                <span class="sensor-value">-- mA</span>
-            </div>
-            <div class="sensor-row">
-                <span class="sensor-label">Wi‑Fi RSSI:</span>
-                <span class="sensor-value">-- dBm</span>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h2>Network</h2>
+            <h2>Network / Status</h2>
             <button id="btnRefreshStatus">Refresh status</button>
+
+            <div class="status-grid" id="statusBlock">
+                <div class="status-row">
+                    <span class="status-label">Wi‑Fi SSID:</span>
+                    <span class="status-value" id="statusWifiSsid">--</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Wi‑Fi RSSI:</span>
+                    <span class="status-value" id="statusWifiRssi">-- dBm</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">CPU temp:</span>
+                    <span class="status-value" id="statusCpuTemp">-- °C</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">CPU load:</span>
+                    <span class="status-value" id="statusCpuLoad">-- %</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Board temp:</span>
+                    <span class="status-value" id="statusBoardTemp">-- °C</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Battery:</span>
+                    <span class="status-value" id="statusBattery">-- V</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Current total:</span>
+                    <span class="status-value" id="statusCurrentTotal">-- A</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">5V rail:</span>
+                    <span class="status-value" id="statusCurrent5V">-- A</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">12V rail:</span>
+                    <span class="status-value" id="statusCurrent12V">-- A</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">Motor driver:</span>
+                    <span class="status-value" id="statusCurrentMotors">-- A</span>
+                </div>
+                <div class="status-row">
+                    <span class="status-label">GPIO pins:</span>
+                    <span class="status-value" id="statusCurrentGpio">-- mA</span>
+                </div>
+            </div>
         </div>
     </div>
 
+    <!-- Вторая колонка: камеры + compact controls -->
     <div class="center-column">
         <div class="panel cameras-column-panel">
             <h2>Cameras</h2>
             <div class="cameras-row">
                 <div class="camera-box">
-                    <div class="camera-title">Stereo camera</div>
+                    <div class="camera-title">Stereo camera (8,9)</div>
                     <div class="camera-view">
-                        <span>Stereo camera feed</span>
+                        <img id="stereoVideo" src="/video/stereo" alt="Stereo camera">
+                        <div class="no-signal" id="stereoNoSignal" style="display:none;">no signal</div>
                     </div>
-                    <div class="camera-status">Stereo: idle</div>
+                    <div class="camera-status" id="stereoStatus">Stereo: idle</div>
                 </div>
                 <div class="camera-box">
-                    <div class="camera-title">CSI camera</div>
+                    <div class="camera-title">CSI camera (7)</div>
                     <div class="camera-view">
-                        <span>CSI camera feed</span>
+                        <img id="csiVideo" src="/video/csi" alt="CSI camera">
+                        <div class="no-signal" id="csiNoSignal" style="display:none;">no signal</div>
                     </div>
-                    <div class="camera-status">CSI: idle</div>
+                    <div class="camera-status" id="csiStatus">CSI: idle</div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div class="right-column">
         <div class="panel">
             <h2>Controls</h2>
             <div class="controls-grid">
@@ -380,31 +433,31 @@
                     </div>
                 </div>
                 <div class="controls-group">
-                    <div class="controls-group-title">Turret</div>
+                    <div class="controls-group-title">Manipulator</div>
                     <div class="controls-column">
                         <button>Turret left <span class="key">RS ←</span></button>
                         <button>Turret right <span class="key">RS →</span></button>
-                    </div>
-                </div>
-                <div class="controls-group">
-                    <div class="controls-group-title">Arm</div>
-                    <div class="controls-column">
                         <button>Arm extend <span class="key">RS ↓</span></button>
                         <button>Arm retract <span class="key">RS ↑</span></button>
-                    </div>
-                </div>
-                <div class="controls-group">
-                    <div class="controls-group-title">Gripper</div>
-                    <div class="controls-column">
                         <button>Gripper close <span class="key">RT</span></button>
                         <button>Gripper open <span class="key">LT</span></button>
                     </div>
                 </div>
             </div>
             <div class="hint">
-                Gamepad: Left stick – base; Right stick – turret/arm; Triggers – gripper.
+                Gamepad: LS – base; RS – manipulator; LT/RT – gripper.
             </div>
             <div id="gamepadStatus">Gamepad: not connected</div>
+        </div>
+    </div>
+
+    <!-- Третья колонка: Simulation + Vehicle and manipulator -->
+    <div class="right-column">
+        <div class="panel">
+            <h2>Simulation</h2>
+            <div class="sim-canvas-wrapper">
+                <canvas id="simCanvas"></canvas>
+            </div>
         </div>
 
         <div class="panel">
@@ -477,7 +530,6 @@
     </div>
 </div>
 
-<script src="/js/main.js"></script>
+<script type="module" src="/js/main.js"></script>
 </body>
 </html>
-

@@ -3,15 +3,15 @@
 #include <QObject>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QProcess>
 #include "RobotModel.h"
 
-    class HttpServer : public QObject
+class HttpServer : public QObject
 {
     Q_OBJECT
 public:
     explicit HttpServer(RobotModel *model, QObject *parent = nullptr);
-
-    bool listen(quint16 port = 8080);
+    bool listen(quint16 port);
 
 private slots:
     void onNewConnection();
@@ -23,4 +23,9 @@ private:
 
     QTcpServer m_server;
     RobotModel *m_model;
+
+#ifdef Q_OS_LINUX
+    QProcess m_procCsi;
+    QProcess m_procStereo;
+#endif
 };

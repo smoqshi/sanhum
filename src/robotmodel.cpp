@@ -4,6 +4,9 @@
 #include <QtGlobal>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QSysInfo>
+#include <QProcess>
+
 #include <algorithm>
 #include <cmath>
 
@@ -32,7 +35,6 @@ void RobotModel::emergencyStop()
     m_v = 0.0;
     m_w = 0.0;
 
-    // Оба мотора стоп, 0% скважность
     m_motorDriver.setLeftMotor(MotorDirection::Stop, 0);
     m_motorDriver.setRightMotor(MotorDirection::Stop, 0);
 }
@@ -42,7 +44,7 @@ void RobotModel::setBaseCommand(double v, double w)
 {
     m_v = v;
     m_w = w;
-    m_emergency = false; // если нужен ручной сброс, можно убрать
+    m_emergency = false;
 }
 
 // ===== ГЛАВНЫЙ ШАГ МОДЕЛИ БАЗЫ =====
@@ -51,24 +53,17 @@ void RobotModel::step(double dt)
     Q_UNUSED(dt);
 
     if (m_emergency) {
-        // дублируем на всякий случай
         m_motorDriver.setLeftMotor(MotorDirection::Stop, 0);
         m_motorDriver.setRightMotor(MotorDirection::Stop, 0);
         return;
     }
 
-    // === ПАРАМЕТРЫ РОБОТА ===
-    // Максимальная линейная скорость колеса (м/с)
     const double maxWheelLinear = 0.5;
-    // Полу‑база (половина расстояния между колёсами), м
     const double halfTrack = 0.15;
 
-    // === ИНВЕРСНАЯ КИНЕМАТИКА ДИФФ. ПРИВОДА ===
-    // vL = v - w * L, vR = v + w * L
     const double vL = m_v - m_w * halfTrack;
     const double vR = m_v + m_w * halfTrack;
 
-    // Нормируем к −1..1 по maxWheelLinear
     double nL = 0.0;
     double nR = 0.0;
     if (maxWheelLinear > 1e-6) {
@@ -76,11 +71,9 @@ void RobotModel::step(double dt)
         nR = vR / maxWheelLinear;
     }
 
-    // Ограничение −1..1
     nL = std::max(-1.0, std::min(1.0, nL));
     nR = std::max(-1.0, std::min(1.0, nR));
 
-    // === ПРЕОБРАЗУЕМ В НАПРАВЛЕНИЕ + % СКОРОСТИ ===
     auto toDirAndDuty = [](double norm) {
         MotorDirection dir;
         if (norm > 1e-3)
@@ -125,10 +118,24 @@ void RobotModel::setGripper(double grip01)
 
 void RobotModel::setTurretAngle(double angleDeg)
 {
-    // нормируем к [-180; 180]
     while (angleDeg > 180.0) angleDeg -= 360.0;
     while (angleDeg < -180.0) angleDeg += 360.0;
     m_turretDeg = angleDeg;
+}
+
+// ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ СТАТУСА =====
+
+static bool isRunningOnRaspberry()
+{
+#ifdef Q_OS_LINUX
+    QFile f("/proc/device-tree/model");
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    const QByteArray model = f.readAll().toLower();
+    return model.contains("raspberry");
+#else
+    return false;
+#endif
 }
 
 // ===== JSON ДЛЯ WEB‑КЛИЕНТА =====
@@ -137,11 +144,33 @@ QJsonObject RobotModel::makeStatusJson() const
 {
     QJsonObject obj;
     obj.insert(QStringLiteral("emergency"), m_emergency);
+
+    // Базовые величины
     obj.insert(QStringLiteral("battery_v"), m_batteryV);
     obj.insert(QStringLiteral("cpu_temp_c"), m_cpuTemp);
     obj.insert(QStringLiteral("board_temp_c"), m_boardTemp);
 
-    // Можно добавить больше полей по мере появления реальных датчиков
+    // Заглушки по умолчанию
+    obj.insert(QStringLiteral("cpu_load_percent"), 0.0);
+    obj.insert(QStringLiteral("current_total_a"), 0.0);
+    obj.insert(QStringLiteral("current_5v_a"), 0.0);
+    obj.insert(QStringLiteral("current_12v_a"), 0.0);
+    obj.insert(QStringLiteral("current_motors_a"), 0.0);
+    obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
+    obj.insert(QStringLiteral("wifi_ssid"), QStringLiteral("--"));
+    obj.insert(QStringLiteral("wifi_rssi_dbm"), 0);
+
+#ifdef Q_OS_LINUX
+    if (isRunningOnRaspberry()) {
+        // здесь по учебникам/документации Raspberry OS читаются реальные файлы
+        // /sys/class/thermal/..., /proc/loadavg, /proc/net/wireless и т.п.
+        // сейчас оставляю как заготовку
+    }
+#else
+    // Windows: можно взять температуру/нагрузку через WMI/PowerShell,
+    // но это выходит за рамки учебного примера, оставляем заглушки.
+#endif
+
     return obj;
 }
 

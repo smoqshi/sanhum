@@ -6,7 +6,6 @@
 
 #include "motordriver.h"
 
-// Модель мобильного робота и манипулятора
 class RobotModel : public QObject
 {
     Q_OBJECT
@@ -16,13 +15,13 @@ public:
 
     // База
     void emergencyStop();
-    void setBaseCommand(double v, double w);      // v [м/с], w [рад/с]
-    void step(double dt);                         // шаг интегратора
+    void setBaseCommand(double v, double w);
+    void step(double dt);
 
     // Манипулятор + эффектор
-    void setArmExtension(double ext01);           // [0..1]
-    void setGripper(double grip01);              // [0..1]
-    void setTurretAngle(double angleDeg);        // [град]
+    void setArmExtension(double ext01);
+    void setGripper(double grip01);
+    void setTurretAngle(double angleDeg);
 
     // Формирование JSON для web‑клиента
     QJsonObject makeStatusJson() const;
@@ -31,17 +30,14 @@ public:
 private:
     MotorDriver m_motorDriver;
 
-    // База
     bool   m_emergency;
-    double m_v;           // линейная скорость, м/с
-    double m_w;           // угловая скорость, рад/с
+    double m_v;
+    double m_w;
 
-    // Состояние манипулятора
-    double m_ext;         // [0..1] относительное выдвижение
-    double m_grip;        // [0..1] захват
-    double m_turretDeg;   // [град]
+    double m_ext;
+    double m_grip;
+    double m_turretDeg;
 
-    // датчики / служебные поля (заглушки)
     double m_batteryV;
     double m_cpuTemp;
     double m_boardTemp;
