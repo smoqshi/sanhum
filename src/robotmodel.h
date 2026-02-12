@@ -6,18 +6,6 @@
 
 class MotorDriver;
 
-/**
- * @brief Математическая модель робота и источник данных статуса для веб‑клиента.
- *
- * Модель:
- *  - принимает команды скорости базы и положения манипулятора;
- *  - в методе step(dt) обновляет внутреннее состояние;
- *  - формирует JSON для эндпоинтов /api/status и /api/joint_state.
- *
- * Построено по рекомендациям учебной литературы по киберфизическим системам:
- * см., например, Ogata K. "Modern Control Engineering" и стандартный подход
- * к дискретизации динамики роботов в шагах dt.[cite:1]
- */
 class RobotModel : public QObject
 {
     Q_OBJECT
@@ -25,56 +13,56 @@ public:
     explicit RobotModel(QObject *parent = nullptr);
     ~RobotModel();
 
-    // ===== /api/base: линейная и угловая скорости =====
-    void setBaseCommand(double v, double w);
+    // команды от /api/base
+    void setBaseCommand(double vLinear, double vAngular);
 
-    // ===== /api/arm: манипулятор =====
-    void setArmExtension(double ext01);   // [0;1]
-    void setGripper(double grip01);       // [0;1]
-    void setTurretAngle(double angleDeg); // [-180;180]
+    // команды от /api/arm
+    void setArmExtension(double ext01);
+    void setGripper(double grip01);
+    void setTurretAngle(double angleDeg);
 
-    // ===== аварийная остановка =====
     void emergencyStop();
 
-    // ===== главный шаг модели (вызывается из таймера) =====
+    // шаг симуляции
     void step(double dt);
 
-    // ===== JSON для веб‑клиента =====
+    // данные для фронтенда
     QJsonObject makeStatusJson() const;      // /api/status
     QJsonObject makeJointStateJson() const;  // /api/joint_state
 
 private:
-    // --- команды на базу ---
-    double m_v;          // линейная скорость команды, м/с
-    double m_w;          // угловая скорость команды, рад/с
-    bool   m_emergency;  // признак аварийной остановки
+    // командные скорости
+    double m_vCmd;           // м/с
+    double m_wCmd;           // рад/с
 
-    // --- состояние манипулятора ---
-    double m_ext;        // вылет звена, 0..1
-    double m_grip;       // положение захвата, 0..1
-    double m_turretDeg;  // азимут башни, градусы
+    // фактические скорости (то, что отправляем назад на UI)
+    double m_vActual;        // м/с
+    double m_wActual;        // рад/с
 
-    // --- псевдодиагностика (для не‑Raspberry окружения) ---
+    bool   m_emergency;
+
+    // состояние базы (поза)
+    double m_x;              // м
+    double m_y;              // м
+    double m_theta;          // рад
+
+    // манипулятор
+    double m_ext;            // 0..1
+    double m_grip;           // 0..1
+    double m_turretDeg;      // градусы
+
+    // псевдодиагностика
     double m_batteryV;
     double m_cpuTemp;
     double m_boardTemp;
 
-    // --- драйвер моторов (абстрактный) ---
     MotorDriver *m_motorDriver;
 
-    // --- параметры базы (геометрия и масштаб ШИМ) ---
-    double m_halfTrack;      // половина колеи, м
-    double m_maxWheelLinear; // макс. линейная скорость колеса при duty=100%, м/с
+    // параметры дифф‑привода
+    double m_halfTrack;      // м
+    double m_maxWheelLinear; // м/с при duty=100%
 
-    // --- внутреннее интегрированное состояние базы (для симуляции) ---
-    double m_x;      // положение по X, м
-    double m_y;      // положение по Y, м
-    double m_theta;  // ориентация, рад
-
-    // пересчёт (v,w) -> (направление, duty) для моторов
     void updateMotorsFromCommand();
-
-    // дискретное интегрирование позы (модель дифф‑привода)
     void integratePose(double dt);
 };
 
