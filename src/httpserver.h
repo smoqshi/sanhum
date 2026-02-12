@@ -33,16 +33,17 @@ private:
 
 #ifdef Q_OS_LINUX
     QProcess m_procCsi;
-    QProcess m_procStereo;
+    QProcess m_procStereoLeft;
+    QProcess m_procStereoRight;
 #endif
 
-    // буферы для парсинга потоков
-    QByteArray m_stereoBuffer;
     QByteArray m_csiBuffer;
+    QByteArray m_stereoLeftBuffer;
+    QByteArray m_stereoRightBuffer;
 
-    // последние полные кадры
-    QByteArray m_lastStereoFrame;
     QByteArray m_lastCsiFrame;
+    QByteArray m_lastStereoLeftFrame;
+    QByteArray m_lastStereoRightFrame;
 };
 
 #endif // HTTPSERVER_H
