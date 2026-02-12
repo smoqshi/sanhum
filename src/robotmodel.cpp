@@ -9,6 +9,7 @@
 #include <QTextStream>
 #include <QRegularExpression>
 #include <QProcess>
+#include <QDebug>
 #include <algorithm>
 
 // Конструктор/деструктор
@@ -33,6 +34,7 @@ RobotModel::~RobotModel() = default;
 
 void RobotModel::emergencyStop()
 {
+    qDebug() << "BaseCommand v=" << v << "w=" << w;
     m_emergency = true;
     m_v = 0.0;
     m_w = 0.0;
@@ -285,6 +287,7 @@ QJsonObject RobotModel::makeJointStateJson() const
     obj.insert(QStringLiteral("gripper"),    m_grip);
     return obj;
 }
+
 
 
 
