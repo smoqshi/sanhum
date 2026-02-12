@@ -42,6 +42,7 @@ export function initUI() {
             const v = parseFloat(vLinearSlider.value) || 0;
             tank.vLinearCmd = v;
             vLinearValue.textContent = v.toFixed(2);
+            sendBaseIfNeeded();
         });
     }
     if (vAngularSlider && vAngularValue) {
@@ -49,6 +50,7 @@ export function initUI() {
             const v = parseFloat(vAngularSlider.value) || 0;
             tank.vAngularCmdDeg = v;
             vAngularValue.textContent = v.toFixed(0);
+            sendBaseIfNeeded();
         });
     }
     if (turretSlider && turretValue) {
@@ -56,6 +58,7 @@ export function initUI() {
             const v = parseFloat(turretSlider.value) || 0;
             tank.turretAngle = v;
             turretValue.textContent = v.toFixed(0);
+            sendArmIfNeeded();
         });
     }
     if (armSlider && armValue) {
@@ -63,6 +66,7 @@ export function initUI() {
             const v = parseFloat(armSlider.value) || 0;
             tank.armExtension = v / 100.0;
             armValue.textContent = v.toFixed(0);
+            sendArmIfNeeded();
         });
     }
     if (gripperSlider && gripperValue) {
@@ -70,6 +74,7 @@ export function initUI() {
             const v = parseFloat(gripperSlider.value) || 0;
             tank.gripper = v / 100.0;
             gripperValue.textContent = v.toFixed(0);
+            sendArmIfNeeded();
         });
     }
 
@@ -251,32 +256,33 @@ function pollGamepad(dt) {
     const lt = gp.buttons[6] ? gp.buttons[6].value : 0;
     const rt = gp.buttons[7] ? gp.buttons[7].value : 0;
 
-    // увеличенный deadzone чтобы убрать дрожание и «инерцию»
     const dead = 0.3;
     const ax = (Math.abs(lx) > dead) ? lx : 0;
     const ay = (Math.abs(ly) > dead) ? ly : 0;
     const axR = (Math.abs(rx) > dead) ? rx : 0;
     const ayR = (Math.abs(ry) > dead) ? ry : 0;
 
-    // база: LS — оставляем как было
+    // база: LS
     tank.vLinearCmd = -ay;
-    tank.vAngularCmdDeg = ax * 40.0; // чуть мягче поворот
+    tank.vAngularCmdDeg = ax * 40.0;
 
-    // манипулятор:
-    // 1) башня — очень медленное изменение при отклонённом RS X
-    const turretSpeedDeg = 25.0; // °/с при полном отклонении
+    // манипулятор: плавные изменения
+    const turretSpeedDeg = 25.0;
+    const armSpeed = 0.25;
+    const gripSpeed = 0.4;
+
     tank.turretAngle += axR * turretSpeedDeg * dt;
-
-    // 2) вылет — медленное изменение по RS Y
-    const armSpeed = 0.25;       // 0..1/с при полном отклонении
     tank.armExtension = clamp01(
         tank.armExtension - ayR * armSpeed * dt
     );
-
-    // 3) хват — медленно по LT/RT
-    const gripSpeed = 0.4;       // 0..1/с
     const gripDelta = (rt - lt) * gripSpeed * dt;
     tank.gripper = clamp01(tank.gripper + gripDelta);
+
+    // если работаем с реальным роботом — отправляем команды на борт
+    if (!tank.simulationMode) {
+        sendBaseIfNeeded();
+        sendArmIfNeeded();
+    }
 }
 
 function clamp01(x) {
@@ -284,4 +290,3 @@ function clamp01(x) {
     if (x > 1) return 1;
     return x;
 }
-
