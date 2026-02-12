@@ -3,10 +3,8 @@
 #include <QDebug>
 #include <algorithm>
 #include <cmath>
-#include <cerrno>
-#include <cstring>
 
-// BCM-номера GPIO по твоей схеме — при необходимости поправь
+// Номера BCM GPIO по твоей схеме. При необходимости поменяй.
 static constexpr int GPIO_IN1 = 17;
 static constexpr int GPIO_IN2 = 27;
 static constexpr int GPIO_IN3 = 23;
@@ -16,94 +14,79 @@ static constexpr int GPIO_ENB = 18;
 
 MotorDriver::MotorDriver(QObject *parent)
     : QObject(parent)
-    , m_chip(nullptr)
-    , m_in1(nullptr)
-    , m_in2(nullptr)
-    , m_in3(nullptr)
-    , m_in4(nullptr)
-    , m_ena(nullptr)
-    , m_enb(nullptr)
+    , m_chip("gpiochip0")   // Pi 5: все GPIO2..27 на gpiochip0 [web:5][web:21]
+    , m_request()           // пока пустой
+    , m_idxIn1(GPIO_IN1)
+    , m_idxIn2(GPIO_IN2)
+    , m_idxIn3(GPIO_IN3)
+    , m_idxIn4(GPIO_IN4)
+    , m_idxEnA(GPIO_ENA)
+    , m_idxEnB(GPIO_ENB)
     , m_leftDir(MotorDirection::Stop)
     , m_rightDir(MotorDirection::Stop)
     , m_leftDuty(0)
     , m_rightDuty(0)
     , m_pwmCounter(0)
 {
-    if (!initLines()) {
-        qWarning() << "MotorDriver: failed to init GPIO lines via gpiod";
+    try {
+        if (!initRequest()) {
+            qWarning() << "MotorDriver: failed to init GPIO line_request";
+        }
+    } catch (const std::exception &e) {
+        qWarning() << "MotorDriver: exception in constructor:" << e.what();
     }
-
-    // Если раньше PWM тикал изнутри, можно включить таймер здесь.
-    // В твоём проекте pwmTick вызывается извне, поэтому не включаю.
 }
 
 MotorDriver::~MotorDriver()
 {
-    if (m_in1) gpiod_line_release(m_in1);
-    if (m_in2) gpiod_line_release(m_in2);
-    if (m_in3) gpiod_line_release(m_in3);
-    if (m_in4) gpiod_line_release(m_in4);
-    if (m_ena) gpiod_line_release(m_ena);
-    if (m_enb) gpiod_line_release(m_enb);
-    if (m_chip) gpiod_chip_close(m_chip);
+    try {
+        if (m_request) {
+            m_request.release();
+        }
+    } catch (const std::exception &e) {
+        qWarning() << "MotorDriver: exception in destructor:" << e.what();
+    }
 }
 
-bool MotorDriver::initLines()
+bool MotorDriver::initRequest()
 {
-    // Pi 5: все обычные GPIO2..27 на gpiochip0 (pinctrl-rp1) [web:5].
-    m_chip = gpiod_chip_open_by_name("gpiochip0");
-    if (!m_chip) {
-        qWarning() << "MotorDriver: gpiod_chip_open_by_name(gpiochip0) failed:" << strerror(errno);
+    // Конфигурация линий: все как выходы, начальное значение 0 [web:18][web:21].
+    gpiod::line_config line_cfg;
+    gpiod::line_settings settings;
+
+    settings.set_direction(gpiod::line::direction::OUTPUT);
+    settings.set_output_value(gpiod::line::value::INACTIVE);
+
+    // одна конфигурация для всех линий
+    line_cfg.add_line_settings(
+        { m_idxIn1, m_idxIn2, m_idxIn3, m_idxIn4, m_idxEnA, m_idxEnB },
+        settings
+    );
+
+    gpiod::request_config req_cfg;
+    req_cfg.set_consumer("sanhum_motors");
+
+    try {
+        m_request = m_chip.request_lines(req_cfg, line_cfg);
+    } catch (const std::exception &e) {
+        qWarning() << "MotorDriver: request_lines failed:" << e.what();
         return false;
     }
 
-    auto getLine = [this](int num, const char *name) -> gpiod_line* {
-        gpiod_line *line = gpiod_chip_get_line(m_chip, num);
-        if (!line) {
-            qWarning() << "MotorDriver: gpiod_chip_get_line failed for" << name
-                       << "num" << num << ":" << strerror(errno);
-        }
-        return line;
-    };
-
-    m_in1 = getLine(GPIO_IN1, "IN1");
-    m_in2 = getLine(GPIO_IN2, "IN2");
-    m_in3 = getLine(GPIO_IN3, "IN3");
-    m_in4 = getLine(GPIO_IN4, "IN4");
-    m_ena = getLine(GPIO_ENA, "ENA");
-    m_enb = getLine(GPIO_ENB, "ENB");
-
-    if (!m_in1 || !m_in2 || !m_in3 || !m_in4 || !m_ena || !m_enb) {
-        qWarning() << "MotorDriver: some GPIO lines are null";
-        return false;
-    }
-
-    auto requestOut = [](gpiod_line *line, const char *consumer, int initVal) {
-        int ret = gpiod_line_request_output(line, consumer, initVal ? 1 : 0);
-        if (ret < 0) {
-            qWarning() << "MotorDriver: gpiod_line_request_output failed for"
-                       << consumer << ":" << strerror(errno);
-            return false;
-        }
-        return true;
-    };
-
-    if (!requestOut(m_in1, "sanhum_in1", 0)) return false;
-    if (!requestOut(m_in2, "sanhum_in2", 0)) return false;
-    if (!requestOut(m_in3, "sanhum_in3", 0)) return false;
-    if (!requestOut(m_in4, "sanhum_in4", 0)) return false;
-    if (!requestOut(m_ena, "sanhum_ena", 0)) return false;
-    if (!requestOut(m_enb, "sanhum_enb", 0)) return false;
-
+    // Все линии уже выставлены в 0 по settings.
     return true;
 }
 
-void MotorDriver::setLine(gpiod_line *line, int value)
+void MotorDriver::setLine(int offset, int value)
 {
-    if (!line) return;
-    int ret = gpiod_line_set_value(line, value ? 1 : 0);
-    if (ret < 0) {
-        qWarning() << "MotorDriver: gpiod_line_set_value failed:" << strerror(errno);
+    if (!m_request) return;
+
+    try {
+        m_request.set_value(offset,
+                            value ? gpiod::line::value::ACTIVE
+                                  : gpiod::line::value::INACTIVE);
+    } catch (const std::exception &e) {
+        qWarning() << "MotorDriver: set_value failed on offset" << offset << ":" << e.what();
     }
 }
 
@@ -122,29 +105,29 @@ void MotorDriver::setRightMotor(MotorDirection dir, int dutyPercent)
 }
 
 void MotorDriver::updateBridgeSide(MotorDirection dir, int duty,
-                                   gpiod_line *inA, gpiod_line *inB, gpiod_line *en)
+                                   int offsetInA, int offsetInB, int offsetEn)
 {
     switch (dir) {
     case MotorDirection::Stop:
-        setLine(inA, 0);
-        setLine(inB, 0);
-        setLine(en, 0);
+        setLine(offsetInA, 0);
+        setLine(offsetInB, 0);
+        setLine(offsetEn, 0);
         break;
     case MotorDirection::Forward:
-        setLine(inA, 1);
-        setLine(inB, 0);
+        setLine(offsetInA, 1);
+        setLine(offsetInB, 0);
         break;
     case MotorDirection::Backward:
-        setLine(inA, 0);
-        setLine(inB, 1);
+        setLine(offsetInA, 0);
+        setLine(offsetInB, 1);
         break;
     }
 
     if (dir == MotorDirection::Stop) {
-        setLine(en, 0);
+        setLine(offsetEn, 0);
     } else {
         int level = (m_pwmCounter < duty) ? 1 : 0;
-        setLine(en, level);
+        setLine(offsetEn, level);
     }
 }
 
@@ -154,8 +137,6 @@ void MotorDriver::pwmTick()
     if (m_pwmCounter >= PWM_PERIOD)
         m_pwmCounter = 0;
 
-    updateBridgeSide(m_leftDir,  m_leftDuty,  m_in1, m_in2, m_ena);
-    updateBridgeSide(m_rightDir, m_rightDuty, m_in3, m_in4, m_enb);
+    updateBridgeSide(m_leftDir,  m_leftDuty,  m_idxIn1, m_idxIn2, m_idxEnA);
+    updateBridgeSide(m_rightDir, m_rightDuty, m_idxIn3, m_idxIn4, m_idxEnB);
 }
-
-
