@@ -9,11 +9,6 @@
 
 #include <QTcpServer>
 #include <QTcpSocket>
-#include <QThread>
-
-#ifdef Q_OS_LINUX
-#include <QProcess>
-#endif
 
 static QByteArray httpResponse(const QByteArray &body,
                                const QByteArray &contentType,
@@ -42,56 +37,6 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
 {
     connect(&m_server, &QTcpServer::newConnection,
             this, &HttpServer::onNewConnection);
-
-#ifdef Q_OS_LINUX
-    // Подготовка процессов для видеопотоков. Пока не используем их
-    // напрямую в HTTP‑обработчике, чтобы не блокировать сервер.
-    m_procCsi.setProgram("rpicam-vid");
-    m_procCsi.setArguments({
-        "--camera", "0",
-        "--timeout", "0",
-        "--codec", "mjpeg",
-        "--width", "1280",
-        "--height", "720",
-        "--framerate", "20",
-        "--nopreview",
-        "-o", "-"
-    });
-    m_procCsi.setProcessChannelMode(QProcess::SeparateChannels);
-    m_procCsi.start();
-
-    m_procStereoLeft.setProgram("ffmpeg");
-    m_procStereoLeft.setArguments({
-        "-loglevel", "error",
-        "-f", "v4l2",
-        "-input_format", "mjpeg",
-        "-framerate", "20",
-        "-video_size", "2560x720",
-        "-i", "/dev/video8",
-        "-filter:v", "crop=iw/2:ih:0:0",
-        "-f", "mjpeg",
-        "-q:v", "5",
-        "pipe:1"
-    });
-    m_procStereoLeft.setProcessChannelMode(QProcess::SeparateChannels);
-    m_procStereoLeft.start();
-
-    m_procStereoRight.setProgram("ffmpeg");
-    m_procStereoRight.setArguments({
-        "-loglevel", "error",
-        "-f", "v4l2",
-        "-input_format", "mjpeg",
-        "-framerate", "20",
-        "-video_size", "2560x720",
-        "-i", "/dev/video8",
-        "-filter:v", "crop=iw/2:ih:iw/2:0",
-        "-f", "mjpeg",
-        "-q:v", "5",
-        "pipe:1"
-    });
-    m_procStereoRight.setProcessChannelMode(QProcess::SeparateChannels);
-    m_procStereoRight.start();
-#endif
 }
 
 bool HttpServer::listen(quint16 port)
@@ -127,11 +72,6 @@ void HttpServer::onDisconnected()
         socket->deleteLater();
 }
 
-#ifdef Q_OS_LINUX
-// Блокирующую реализацию MJPEG‑стрима убираем, чтобы не вешать сервер.
-// Оставляем заглушки в handleRequest.
-#endif
-
 void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
 {
     const int firstLineEnd = request.indexOf("\r\n");
@@ -160,27 +100,6 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     QString wwwRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/www");
     if (!QDir(wwwRoot).exists()) {
         wwwRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/../www");
-    }
-
-    // --- MJPEG: CSI (пока заглушка, чтобы не блокировать сервер) ---
-    if (method == "GET" && path == "/video/csi") {
-        socket->write(httpResponse("no signal (MJPEG temporarily disabled)", "text/plain", 503, "Service Unavailable"));
-        socket->disconnectFromHost();
-        return;
-    }
-
-    // --- MJPEG: Stereo left (заглушка) ---
-    if (method == "GET" && path == "/video/stereo_left") {
-        socket->write(httpResponse("no signal (MJPEG temporarily disabled)", "text/plain", 503, "Service Unavailable"));
-        socket->disconnectFromHost();
-        return;
-    }
-
-    // --- MJPEG: Stereo right (заглушка) ---
-    if (method == "GET" && path == "/video/stereo_right") {
-        socket->write(httpResponse("no signal (MJPEG temporarily disabled)", "text/plain", 503, "Service Unavailable"));
-        socket->disconnectFromHost();
-        return;
     }
 
     // --- index.html ---
@@ -274,5 +193,3 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     socket->write(httpResponse("404 from default handler", "text/plain", 404, "Not Found"));
     socket->disconnectFromHost();
 }
-
-
