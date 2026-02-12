@@ -21,25 +21,34 @@ MotorDriver::MotorDriver(QObject *parent)
     , m_leftDuty(0)
     , m_rightDuty(0)
 {
+    // обновляем моторы 10 раз в секунду (можно сделать 50 для ещё меньшей задержки)
+    m_updateTimer.setInterval(100);
+    connect(&m_updateTimer, &QTimer::timeout,
+            this, &MotorDriver::onUpdateTimer);
+    m_updateTimer.start();
 }
 
 void MotorDriver::setLeftMotor(MotorDirection dir, int duty)
 {
     m_leftDir  = dir;
     m_leftDuty = duty;
-    applyCommand();
 }
 
 void MotorDriver::setRightMotor(MotorDirection dir, int duty)
 {
     m_rightDir  = dir;
     m_rightDuty = duty;
+}
+
+void MotorDriver::onUpdateTimer()
+{
     applyCommand();
 }
 
 void MotorDriver::applyCommand()
 {
     auto *proc = new QProcess(this);
+
     QString program = "python3";
     QString baseDir = QCoreApplication::applicationDirPath();
     QString script  = baseDir + "/src/motor_control.py";
@@ -52,11 +61,19 @@ void MotorDriver::applyCommand()
          << QString::number(m_rightDuty);
 
     connect(proc, &QProcess::finished,
-            proc, &QProcess::deleteLater);
+            this,
+            [proc](int code, QProcess::ExitStatus st) {
+                if (code != 0 || st != QProcess::NormalExit) {
+                    qWarning() << "motor_control.py finished, code=" << code
+                               << "status=" << st;
+                    qWarning() << "stderr:" << proc->readAllStandardError();
+                }
+                proc->deleteLater();
+            });
 
     proc->start(program, args);
-    // максимум: короткая проверка на старт
-    // proc->waitForStarted(100);
 }
+
+
 
 
