@@ -197,6 +197,7 @@ void MotorDriver::setRightMotor(MotorDirection dir, int speed_percent)
 }
 
 
+
 // ===== ТИК PWM =====
 void MotorDriver::pwmTick()
 {
@@ -215,6 +216,7 @@ void MotorDriver::pwmTick()
     applyPhaseForMotor(m_rightFdIn1, m_rightFdIn2,
                        rightDir, rightDuty, m_phase);
 }
+
 
 
 
