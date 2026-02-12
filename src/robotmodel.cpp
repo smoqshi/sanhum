@@ -8,6 +8,7 @@
 #include <QtMath>
 #include <QTextStream>
 #include <QRegularExpression>
+#include <QProcess>
 #include <algorithm>
 
 // Конструктор/деструктор
@@ -296,3 +297,4 @@ QJsonObject RobotModel::makeJointStateJson() const
     obj.insert(QStringLiteral("gripper"),    m_grip);
     return obj;
 }
+
