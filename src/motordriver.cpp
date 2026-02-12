@@ -176,8 +176,9 @@ void MotorDriver::applyPhaseForMotor(int fdA,
 // ===== ПУБЛИЧНЫЕ МЕТОДЫ =====
 void MotorDriver::setLeftMotor(MotorDirection dir, int speed_percent)
 {
-    qDebug() << "Left motor dir=" << int(dir) << "duty=" << duty;
-    if (speed_percent < 0)   speed_percent = 0;
+    qDebug() << "Left motor dir=" << int(dir) << "duty=" << speed_percent;
+
+    if (speed_percent < 0) speed_percent = 0;
     if (speed_percent > 100) speed_percent = 100;
 
     m_leftDir.store(dir);
@@ -186,13 +187,15 @@ void MotorDriver::setLeftMotor(MotorDirection dir, int speed_percent)
 
 void MotorDriver::setRightMotor(MotorDirection dir, int speed_percent)
 {
-    qDebug() << "Right motor dir=" << int(dir) << "duty=" << duty;
-    if (speed_percent < 0)   speed_percent = 0;
+    qDebug() << "Right motor dir=" << int(dir) << "duty=" << speed_percent;
+
+    if (speed_percent < 0) speed_percent = 0;
     if (speed_percent > 100) speed_percent = 100;
 
     m_rightDir.store(dir);
     m_rightDuty.store(speed_percent);
 }
+
 
 // ===== ТИК PWM =====
 void MotorDriver::pwmTick()
@@ -212,5 +215,6 @@ void MotorDriver::pwmTick()
     applyPhaseForMotor(m_rightFdIn1, m_rightFdIn2,
                        rightDir, rightDuty, m_phase);
 }
+
 
 
