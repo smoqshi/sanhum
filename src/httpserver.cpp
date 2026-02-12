@@ -60,16 +60,27 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
     });
     m_procCsi.setProcessChannelMode(QProcess::SeparateChannels);
     connect(&m_procCsi, &QProcess::readyReadStandardOutput, this, [this]() {
-        // Дописываем новые байты
-        m_lastCsiFrame += m_procCsi.readAllStandardOutput();
-        // Ищем последний полный JPEG по маркерам FF D8 ... FF D9
-        int start = m_lastCsiFrame.lastIndexOf("\xFF\xD8");
-        int end   = m_lastCsiFrame.lastIndexOf("\xFF\xD9");
-        if (start >= 0 && end > start) {
-            QByteArray frame = m_lastCsiFrame.mid(start, end - start + 2);
-            m_lastCsiFrame = frame; // сохраняем только последний полный кадр
-        } else if (start > 0) {
-            m_lastCsiFrame = m_lastCsiFrame.mid(start);
+        m_csiBuffer += m_procCsi.readAllStandardOutput();
+
+        // Парсим последовательно все полные кадры, оставляя в буфере хвост
+        while (true) {
+            int start = m_csiBuffer.indexOf("\xFF\xD8");
+            if (start < 0) {
+                // нет начала JPEG — чистим мусор
+                if (m_csiBuffer.size() > 1024 * 1024)
+                    m_csiBuffer.clear();
+                break;
+            }
+            if (start > 0)
+                m_csiBuffer.remove(0, start);
+
+            int end = m_csiBuffer.indexOf("\xFF\xD9", 2);
+            if (end < 0)
+                break; // нет конца кадра, ждём следующий read
+
+            int frameLen = end + 2;
+            m_lastCsiFrame = m_csiBuffer.left(frameLen);
+            m_csiBuffer.remove(0, frameLen);
         }
     });
     m_procCsi.start();
@@ -88,14 +99,25 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
     });
     m_procStereo.setProcessChannelMode(QProcess::SeparateChannels);
     connect(&m_procStereo, &QProcess::readyReadStandardOutput, this, [this]() {
-        m_lastStereoFrame += m_procStereo.readAllStandardOutput();
-        int start = m_lastStereoFrame.lastIndexOf("\xFF\xD8");
-        int end   = m_lastStereoFrame.lastIndexOf("\xFF\xD9");
-        if (start >= 0 && end > start) {
-            QByteArray frame = m_lastStereoFrame.mid(start, end - start + 2);
-            m_lastStereoFrame = frame;
-        } else if (start > 0) {
-            m_lastStereoFrame = m_lastStereoFrame.mid(start);
+        m_stereoBuffer += m_procStereo.readAllStandardOutput();
+
+        while (true) {
+            int start = m_stereoBuffer.indexOf("\xFF\xD8");
+            if (start < 0) {
+                if (m_stereoBuffer.size() > 1024 * 1024)
+                    m_stereoBuffer.clear();
+                break;
+            }
+            if (start > 0)
+                m_stereoBuffer.remove(0, start);
+
+            int end = m_stereoBuffer.indexOf("\xFF\xD9", 2);
+            if (end < 0)
+                break;
+
+            int frameLen = end + 2;
+            m_lastStereoFrame = m_stereoBuffer.left(frameLen);
+            m_stereoBuffer.remove(0, frameLen);
         }
     });
     m_procStereo.start();
@@ -327,3 +349,5 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     socket->write(httpResponse("404 from default handler", "text/plain", 404, "Not Found"));
     socket->disconnectFromHost();
 }
+
+
