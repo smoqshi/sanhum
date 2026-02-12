@@ -1,26 +1,24 @@
 import { tank } from './robotState.js';
 
-// Простейшая 2D‑модель: башня + телескопическое звено + захват
 export function initManipulator() {
-    // Нормализуем начальные значения, если не заданы
     if (typeof tank.turretAngle !== 'number') {
         tank.turretAngle = 0.0;
     }
     if (typeof tank.armExtension !== 'number') {
-        tank.armExtension = 0.5; // 50 %
+        tank.armExtension = 0.5;
     }
     if (typeof tank.gripper !== 'number') {
-        tank.gripper = 0.3;      // 30 % закрытия
+        tank.gripper = 0.3;
     }
 }
 
 export function drawManipulator(ctx) {
-    // Геометрия должна совпадать с chassis.js
-    const hullW = 160;
-    const hullH = 100;
+    // новые размеры под уменьшенный корпус
+    const hullW = 120;
+    const hullH = 70;
     const bedW = hullW * 0.55;
     const bedX = -hullW / 2;
-    const turretBaseX = bedX + bedW * 0.5;  // центр задней платформы
+    const turretBaseX = bedX + bedW * 0.5;
     const turretBaseY = 0;
 
     const cx = tank.x;
@@ -30,45 +28,39 @@ export function drawManipulator(ctx) {
     ctx.translate(cx, cy);
     ctx.rotate(tank.heading);
 
-    // Переходим в систему координат башни
     ctx.save();
     ctx.translate(turretBaseX, turretBaseY);
     ctx.rotate(tank.turretAngle * Math.PI / 180.0);
 
-    // Башня
-    const turretW = 22;
-    const turretH = 16;
+    const turretW = 18;
+    const turretH = 14;
     ctx.fillStyle = "#111827";
     ctx.strokeStyle = "#4b5563";
     ctx.lineWidth = 2;
     ctx.beginPath();
     if (ctx.roundRect) {
-        ctx.roundRect(-turretW / 2, -turretH / 2, turretW, turretH, 4);
+        ctx.roundRect(-turretW / 2, -turretH / 2, turretW, turretH, 3);
     } else {
         ctx.rect(-turretW / 2, -turretH / 2, turretW, turretH);
     }
     ctx.fill();
     ctx.stroke();
 
-    // База стрелы — всегда вдоль локальной -X оси башни
     const baseY = -turretH / 2;
     const baseDirX = -1;
     const baseDirY = 0;
 
-    // Первое звено фиксированной длины
-    const L0 = 40;
+    const L0 = 30;
     const baseEndX = baseDirX * L0;
     const baseEndY = baseY + baseDirY * L0;
 
-    // Телескопический вылет вдоль того же направления
-    const LextMax = 60;
-    const extNorm = clamp01(tank.armExtension); // ожидаем 0..1
+    const LextMax = 45;
+    const extNorm = clamp01(tank.armExtension);
     const Lext = LextMax * extNorm;
 
     const tipX = baseEndX + baseDirX * Lext;
     const tipY = baseEndY + baseDirY * Lext;
 
-    // Базовое звено
     ctx.strokeStyle = "#facc15";
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -76,26 +68,23 @@ export function drawManipulator(ctx) {
     ctx.lineTo(baseEndX, baseEndY);
     ctx.stroke();
 
-    // Телескопическая часть
     ctx.beginPath();
     ctx.moveTo(baseEndX, baseEndY);
     ctx.lineTo(tipX, tipY);
     ctx.stroke();
 
-    // Маркер середины телескопа
     const midX = baseEndX + baseDirX * (Lext * 0.5);
     const midY = baseEndY + baseDirY * (Lext * 0.5);
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(midX, midY - 3);
-    ctx.lineTo(midX, midY + 3);
+    ctx.moveTo(midX, midY - 2);
+    ctx.lineTo(midX, midY + 2);
     ctx.stroke();
 
-    // Захват на конце
-    const baseAngle = Math.atan2(baseDirY, baseDirX); // направление стрелы (вдоль -X)
-    const endAngle = baseAngle;                       // можно развернуть при желании
-    const gripLen = 14;
-    const gripOpen = (1 - clamp01(tank.gripper)) * 0.6; // 0..0.6 рад
+    const baseAngle = Math.atan2(baseDirY, baseDirX);
+    const endAngle = baseAngle;
+    const gripLen = 10;
+    const gripOpen = (1 - clamp01(tank.gripper)) * 0.6;
 
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -111,8 +100,8 @@ export function drawManipulator(ctx) {
     );
     ctx.stroke();
 
-    ctx.restore(); // из локальной системы башни
-    ctx.restore(); // из мировой системы
+    ctx.restore();
+    ctx.restore();
 }
 
 function clamp01(x) {
