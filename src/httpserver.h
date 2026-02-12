@@ -4,13 +4,8 @@
 #include <QObject>
 #include <QTcpServer>
 #include <QTcpSocket>
-#include <QByteArray>
 
 class RobotModel;
-
-#ifdef Q_OS_LINUX
-#include <QProcess>
-#endif
 
 class HttpServer : public QObject
 {
@@ -30,12 +25,6 @@ private:
 
     QTcpServer m_server;
     RobotModel *m_model;
-
-#ifdef Q_OS_LINUX
-    QProcess m_procCsi;
-    QProcess m_procStereoLeft;
-    QProcess m_procStereoRight;
-#endif
 };
 
 #endif // HTTPSERVER_H
