@@ -1,25 +1,52 @@
 #!/usr/bin/env python3
 import sys
 import gpiod
+from gpiod.line import Direction, Value
 
 GPIO_IN1 = 17
 GPIO_IN2 = 27
 GPIO_IN3 = 23
 GPIO_IN4 = 24
 
+CHIP_PATH = "/dev/gpiochip0"
+
+
 def set_pins(in1, in2, in3, in4):
-    chip = gpiod.Chip("/dev/gpiochip0")
-    lines = chip.get_lines([GPIO_IN1, GPIO_IN2, GPIO_IN3, GPIO_IN4])
-    lines.request(
+    # Словарь: номер линии -> стартовое значение
+    config = {
+        GPIO_IN1: gpiod.LineSettings(
+            direction=Direction.OUTPUT,
+            output_value=Value.ACTIVE if in1 else Value.INACTIVE,
+        ),
+        GPIO_IN2: gpiod.LineSettings(
+            direction=Direction.OUTPUT,
+            output_value=Value.ACTIVE if in2 else Value.INACTIVE,
+        ),
+        GPIO_IN3: gpiod.LineSettings(
+            direction=Direction.OUTPUT,
+            output_value=Value.ACTIVE if in3 else Value.INACTIVE,
+        ),
+        GPIO_IN4: gpiod.LineSettings(
+            direction=Direction.OUTPUT,
+            output_value=Value.ACTIVE if in4 else Value.INACTIVE,
+        ),
+    }
+
+    # Открываем чип, запрашиваем линии, удерживаем их пока объект жив
+    with gpiod.request_lines(
+        CHIP_PATH,
         consumer="sanhum_py",
-        type=gpiod.LINE_REQ_DIR_OUT,
-        default_vals=[0, 0, 0, 0],
-    )
-    try:
-        lines.set_values([in1, in2, in3, in4])
-    finally:
-        lines.release()
-        chip.close()
+        config=config,
+    ) as request:
+        # Можно ещё раз явно задать значения (на случай, если хочешь обновлять)
+        values = {
+            GPIO_IN1: Value.ACTIVE if in1 else Value.INACTIVE,
+            GPIO_IN2: Value.ACTIVE if in2 else Value.INACTIVE,
+            GPIO_IN3: Value.ACTIVE if in3 else Value.INACTIVE,
+            GPIO_IN4: Value.ACTIVE if in4 else Value.INACTIVE,
+        }
+        request.set_values(values)
+
 
 def main():
     if len(sys.argv) != 5:
@@ -41,5 +68,7 @@ def main():
 
     set_pins(in1, in2, in3, in4)
 
+
 if __name__ == "__main__":
     main()
+
