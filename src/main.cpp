@@ -16,10 +16,10 @@ int main(int argc, char *argv[])
         qFatal("Failed to listen on port 8080");
     }
 
-    // шаг интегратора модели
+    // шаг интегратора модели (и обновление моторов)
     QTimer timer;
     QObject::connect(&timer, &QTimer::timeout, [&model]() {
-        constexpr double dt = 0.02;  // 20 мс
+        constexpr double dt = 0.02; // 20 мс
         model.step(dt);
     });
     timer.start(20);
