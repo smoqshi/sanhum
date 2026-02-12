@@ -1,5 +1,4 @@
 QT       += core gui network
-
 greaterThan(QT_MAJOR_VERSION, 5): QT += widgets
 
 TARGET = Sanhum
@@ -22,6 +21,14 @@ HEADERS += \
     src/armkinematics.h
 
 RESOURCES += resources.qrc
+
+DISTFILES += \
+    www/index.html \
+    www/js/robotState.js \
+    www/js/network.js \
+    www/js/chassis.js \
+    www/js/manipulator.js \
+    www/js/uiControls.js
 
 win32 {
     QMAKE_POST_LINK += xcopy /E /I /Y \"$$PWD\\www\" \"$$OUT_PWD\\www\" & echo.
