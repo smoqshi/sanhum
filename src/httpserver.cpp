@@ -6,10 +6,10 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QThread>
 
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QThread>
 
 #ifdef Q_OS_LINUX
 #include <QProcess>
@@ -44,7 +44,7 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
             this, &HttpServer::onNewConnection);
 
 #ifdef Q_OS_LINUX
-    // ----- CSI: rpicam-vid -> stdout (без превью) -----
+    // CSI: rpicam-vid, без превью, MJPEG в stdout
     m_procCsi.setProgram("rpicam-vid");
     m_procCsi.setArguments({
         "--camera", "0",
@@ -53,19 +53,23 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
         "--width", "1280",
         "--height", "720",
         "--framerate", "20",
+        "--nopreview",
         "-o", "-"
     });
     m_procCsi.setProcessChannelMode(QProcess::SeparateChannels);
     m_procCsi.start();
 
-    // ----- Stereo LEFT: /dev/video8 -> ffmpeg -> stdout -----
+    // Stereo LEFT: /dev/video8, левая половина кадра
+    // ПОДПРАВЬ video_size, если реальное разрешение другое.
     m_procStereoLeft.setProgram("ffmpeg");
     m_procStereoLeft.setArguments({
+        "-loglevel", "error",
         "-f", "v4l2",
         "-input_format", "mjpeg",
         "-framerate", "20",
-        "-video_size", "1280x720",
+        "-video_size", "2560x720",
         "-i", "/dev/video8",
+        "-filter:v", "crop=iw/2:ih:0:0",
         "-f", "mjpeg",
         "-q:v", "5",
         "pipe:1"
@@ -73,14 +77,16 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
     m_procStereoLeft.setProcessChannelMode(QProcess::SeparateChannels);
     m_procStereoLeft.start();
 
-    // ----- Stereo RIGHT: /dev/video9 -> ffmpeg -> stdout -----
+    // Stereo RIGHT: /dev/video8, правая половина кадра
     m_procStereoRight.setProgram("ffmpeg");
     m_procStereoRight.setArguments({
+        "-loglevel", "error",
         "-f", "v4l2",
         "-input_format", "mjpeg",
         "-framerate", "20",
-        "-video_size", "1280x720",
-        "-i", "/dev/video9",
+        "-video_size", "2560x720",
+        "-i", "/dev/video8",
+        "-filter:v", "crop=iw/2:ih:iw/2:0",
         "-f", "mjpeg",
         "-q:v", "5",
         "pipe:1"
@@ -123,10 +129,9 @@ void HttpServer::onDisconnected()
         socket->deleteLater();
 }
 
-// Вспомогательная функция: прокинуть MJPEG из QProcess в HTTP-сокет
-static void streamMjpeg(QTcpSocket *socket, QProcess *proc)
-{
 #ifdef Q_OS_LINUX
+static void streamMjpegFromProcess(QTcpSocket *socket, QProcess *proc)
+{
     socket->write(
         "HTTP/1.1 200 OK\r\n"
         "Connection: close\r\n"
@@ -174,14 +179,11 @@ static void streamMjpeg(QTcpSocket *socket, QProcess *proc)
             socket->flush();
 
             if (!socket->waitForBytesWritten(100))
-                return; // клиент отвалился
+                return;
         }
     }
-#else
-    Q_UNUSED(socket)
-    Q_UNUSED(proc)
-#endif
 }
+#endif
 
 void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
 {
@@ -213,10 +215,10 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         wwwRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/../www");
     }
 
-    // ---------- MJPEG: CSI ----------
+    // --- MJPEG: CSI ---
     if (method == "GET" && path == "/video/csi") {
 #ifdef Q_OS_LINUX
-        streamMjpeg(socket, &m_procCsi);
+        streamMjpegFromProcess(socket, &m_procCsi);
 #else
         socket->write(httpResponse("no signal", "text/plain", 503, "Service Unavailable"));
 #endif
@@ -224,10 +226,10 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- MJPEG: Stereo LEFT ----------
+    // --- MJPEG: Stereo left ---
     if (method == "GET" && path == "/video/stereo_left") {
 #ifdef Q_OS_LINUX
-        streamMjpeg(socket, &m_procStereoLeft);
+        streamMjpegFromProcess(socket, &m_procStereoLeft);
 #else
         socket->write(httpResponse("no signal", "text/plain", 503, "Service Unavailable"));
 #endif
@@ -235,10 +237,10 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- MJPEG: Stereo RIGHT ----------
+    // --- MJPEG: Stereo right ---
     if (method == "GET" && path == "/video/stereo_right") {
 #ifdef Q_OS_LINUX
-        streamMjpeg(socket, &m_procStereoRight);
+        streamMjpegFromProcess(socket, &m_procStereoRight);
 #else
         socket->write(httpResponse("no signal", "text/plain", 503, "Service Unavailable"));
 #endif
@@ -246,7 +248,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- index.html ----------
+    // --- index.html ---
     if (method == "GET" && (path == "/" || path == "/index.html")) {
         QFile f(wwwRoot + "/index.html");
         if (!f.open(QIODevice::ReadOnly)) {
@@ -259,7 +261,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- статика js ----------
+    // --- static js ---
     if (method == "GET" && path.startsWith("/js/")) {
         const QString name = QString::fromUtf8(path.mid(4));
         QFile f(wwwRoot + "/js/" + name);
@@ -273,7 +275,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- API: status ----------
+    // --- API: status ---
     if (method == "GET" && path == "/api/status") {
         const QJsonDocument doc(m_model->makeStatusJson());
         const QByteArray data = doc.toJson(QJsonDocument::Compact);
@@ -282,7 +284,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- API: joint_state ----------
+    // --- API: joint_state ---
     if (method == "GET" && path == "/api/joint_state") {
         const QJsonDocument doc(m_model->makeJointStateJson());
         const QByteArray data = doc.toJson(QJsonDocument::Compact);
@@ -291,7 +293,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- API: base ----------
+    // --- API: base ---
     if (method == "POST" && path == "/api/base") {
         const QJsonDocument doc = QJsonDocument::fromJson(body);
         const QJsonObject obj = doc.object();
@@ -313,7 +315,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- API: arm ----------
+    // --- API: arm ---
     if (method == "POST" && path == "/api/arm") {
         const QJsonDocument doc = QJsonDocument::fromJson(body);
         const QJsonObject obj = doc.object();
@@ -334,7 +336,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- 404 ----------
     socket->write(httpResponse("404 from default handler", "text/plain", 404, "Not Found"));
     socket->disconnectFromHost();
 }
+
