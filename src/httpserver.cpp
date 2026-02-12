@@ -44,7 +44,7 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
             this, &HttpServer::onNewConnection);
 
 #ifdef Q_OS_LINUX
-    // ----- CSI камера: rpicam-vid -> stdout -> m_lastCsiFrame -----
+    // ----- CSI: rpicam-vid -> stdout (без превью) -----
     m_procCsi.setProgram("rpicam-vid");
     m_procCsi.setArguments({
         "--camera", "0",
@@ -56,30 +56,6 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
         "-o", "-"
     });
     m_procCsi.setProcessChannelMode(QProcess::SeparateChannels);
-    connect(&m_procCsi, &QProcess::readyReadStandardOutput, this, [this]() {
-        m_csiBuffer += m_procCsi.readAllStandardOutput();
-
-        while (true) {
-            int start = m_csiBuffer.indexOf("\xFF\xD8");
-            if (start < 0) {
-                if (m_csiBuffer.size() > 1024 * 1024)
-                    m_csiBuffer.clear();
-                break;
-            }
-            if (start > 0)
-                m_csiBuffer.remove(0, start);
-
-            int end = m_csiBuffer.indexOf("\xFF\xD9", 2);
-            if (end < 0)
-                break;
-
-            int frameLen = end + 2;
-            m_lastCsiFrame = m_csiBuffer.left(frameLen);
-            m_csiBuffer.remove(0, frameLen);
-
-            qInfo() << "[CSI] frame bytes:" << m_lastCsiFrame.size();
-        }
-    });
     m_procCsi.start();
 
     // ----- Stereo LEFT: /dev/video8 -> ffmpeg -> stdout -----
@@ -95,30 +71,6 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
         "pipe:1"
     });
     m_procStereoLeft.setProcessChannelMode(QProcess::SeparateChannels);
-    connect(&m_procStereoLeft, &QProcess::readyReadStandardOutput, this, [this]() {
-        m_stereoLeftBuffer += m_procStereoLeft.readAllStandardOutput();
-
-        while (true) {
-            int start = m_stereoLeftBuffer.indexOf("\xFF\xD8");
-            if (start < 0) {
-                if (m_stereoLeftBuffer.size() > 1024 * 1024)
-                    m_stereoLeftBuffer.clear();
-                break;
-            }
-            if (start > 0)
-                m_stereoLeftBuffer.remove(0, start);
-
-            int end = m_stereoLeftBuffer.indexOf("\xFF\xD9", 2);
-            if (end < 0)
-                break;
-
-            int frameLen = end + 2;
-            m_lastStereoLeftFrame = m_stereoLeftBuffer.left(frameLen);
-            m_stereoLeftBuffer.remove(0, frameLen);
-
-            qInfo() << "[Stereo L] frame bytes:" << m_lastStereoLeftFrame.size();
-        }
-    });
     m_procStereoLeft.start();
 
     // ----- Stereo RIGHT: /dev/video9 -> ffmpeg -> stdout -----
@@ -134,35 +86,7 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
         "pipe:1"
     });
     m_procStereoRight.setProcessChannelMode(QProcess::SeparateChannels);
-    connect(&m_procStereoRight, &QProcess::readyReadStandardOutput, this, [this]() {
-        m_stereoRightBuffer += m_procStereoRight.readAllStandardOutput();
-
-        while (true) {
-            int start = m_stereoRightBuffer.indexOf("\xFF\xD8");
-            if (start < 0) {
-                if (m_stereoRightBuffer.size() > 1024 * 1024)
-                    m_stereoRightBuffer.clear();
-                break;
-            }
-            if (start > 0)
-                m_stereoRightBuffer.remove(0, start);
-
-            int end = m_stereoRightBuffer.indexOf("\xFF\xD9", 2);
-            if (end < 0)
-                break;
-
-            int frameLen = end + 2;
-            m_lastStereoRightFrame = m_stereoRightBuffer.left(frameLen);
-            m_stereoRightBuffer.remove(0, frameLen);
-
-            qInfo() << "[Stereo R] frame bytes:" << m_lastStereoRightFrame.size();
-        }
-    });
     m_procStereoRight.start();
-
-    qInfo() << "CSI started, pid=" << m_procCsi.processId();
-    qInfo() << "Stereo L started, pid=" << m_procStereoLeft.processId();
-    qInfo() << "Stereo R started, pid=" << m_procStereoRight.processId();
 #endif
 }
 
@@ -199,6 +123,66 @@ void HttpServer::onDisconnected()
         socket->deleteLater();
 }
 
+// Вспомогательная функция: прокинуть MJPEG из QProcess в HTTP-сокет
+static void streamMjpeg(QTcpSocket *socket, QProcess *proc)
+{
+#ifdef Q_OS_LINUX
+    socket->write(
+        "HTTP/1.1 200 OK\r\n"
+        "Connection: close\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Pragma: no-cache\r\n"
+        "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n"
+    );
+
+    QByteArray buf;
+
+    while (socket->state() == QAbstractSocket::ConnectedState) {
+        if (!proc->waitForReadyRead(1000))
+            continue;
+
+        buf += proc->readAllStandardOutput();
+
+        while (true) {
+            int start = buf.indexOf("\xFF\xD8");
+            if (start < 0) {
+                if (buf.size() > 1024 * 1024)
+                    buf.clear();
+                break;
+            }
+            if (start > 0)
+                buf.remove(0, start);
+
+            int end = buf.indexOf("\xFF\xD9", 2);
+            if (end < 0)
+                break;
+
+            int frameLen = end + 2;
+            QByteArray frame = buf.left(frameLen);
+            buf.remove(0, frameLen);
+
+            QByteArray header;
+            header += "--frame\r\n";
+            header += "Content-Type: image/jpeg\r\n";
+            header += "Content-Length: ";
+            header += QByteArray::number(frame.size());
+            header += "\r\n\r\n";
+
+            socket->write(header);
+            socket->write(frame);
+            socket->write("\r\n");
+            socket->flush();
+
+            if (!socket->waitForBytesWritten(100))
+                return; // клиент отвалился
+        }
+    }
+#else
+    Q_UNUSED(socket)
+    Q_UNUSED(proc)
+#endif
+}
+
 void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
 {
     const int firstLineEnd = request.indexOf("\r\n");
@@ -232,31 +216,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     // ---------- MJPEG: CSI ----------
     if (method == "GET" && path == "/video/csi") {
 #ifdef Q_OS_LINUX
-        socket->write(
-            "HTTP/1.1 200 OK\r\n"
-            "Connection: close\r\n"
-            "Cache-Control: no-cache\r\n"
-            "Pragma: no-cache\r\n"
-            "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n"
-        );
-
-        while (socket->state() == QAbstractSocket::ConnectedState) {
-            if (!m_lastCsiFrame.isEmpty()) {
-                QByteArray header;
-                header += "--frame\r\n";
-                header += "Content-Type: image/jpeg\r\n";
-                header += "Content-Length: ";
-                header += QByteArray::number(m_lastCsiFrame.size());
-                header += "\r\n\r\n";
-                socket->write(header);
-                socket->write(m_lastCsiFrame);
-                socket->write("\r\n");
-                socket->flush();
-            }
-            QThread::msleep(50);
-            if (!socket->waitForBytesWritten(10))
-                break;
-        }
+        streamMjpeg(socket, &m_procCsi);
 #else
         socket->write(httpResponse("no signal", "text/plain", 503, "Service Unavailable"));
 #endif
@@ -267,31 +227,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     // ---------- MJPEG: Stereo LEFT ----------
     if (method == "GET" && path == "/video/stereo_left") {
 #ifdef Q_OS_LINUX
-        socket->write(
-            "HTTP/1.1 200 OK\r\n"
-            "Connection: close\r\n"
-            "Cache-Control: no-cache\r\n"
-            "Pragma: no-cache\r\n"
-            "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n"
-        );
-
-        while (socket->state() == QAbstractSocket::ConnectedState) {
-            if (!m_lastStereoLeftFrame.isEmpty()) {
-                QByteArray header;
-                header += "--frame\r\n";
-                header += "Content-Type: image/jpeg\r\n";
-                header += "Content-Length: ";
-                header += QByteArray::number(m_lastStereoLeftFrame.size());
-                header += "\r\n\r\n";
-                socket->write(header);
-                socket->write(m_lastStereoLeftFrame);
-                socket->write("\r\n");
-                socket->flush();
-            }
-            QThread::msleep(50);
-            if (!socket->waitForBytesWritten(10))
-                break;
-        }
+        streamMjpeg(socket, &m_procStereoLeft);
 #else
         socket->write(httpResponse("no signal", "text/plain", 503, "Service Unavailable"));
 #endif
@@ -302,31 +238,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     // ---------- MJPEG: Stereo RIGHT ----------
     if (method == "GET" && path == "/video/stereo_right") {
 #ifdef Q_OS_LINUX
-        socket->write(
-            "HTTP/1.1 200 OK\r\n"
-            "Connection: close\r\n"
-            "Cache-Control: no-cache\r\n"
-            "Pragma: no-cache\r\n"
-            "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n"
-        );
-
-        while (socket->state() == QAbstractSocket::ConnectedState) {
-            if (!m_lastStereoRightFrame.isEmpty()) {
-                QByteArray header;
-                header += "--frame\r\n";
-                header += "Content-Type: image/jpeg\r\n";
-                header += "Content-Length: ";
-                header += QByteArray::number(m_lastStereoRightFrame.size());
-                header += "\r\n\r\n";
-                socket->write(header);
-                socket->write(m_lastStereoRightFrame);
-                socket->write("\r\n");
-                socket->flush();
-            }
-            QThread::msleep(50);
-            if (!socket->waitForBytesWritten(10))
-                break;
-        }
+        streamMjpeg(socket, &m_procStereoRight);
 #else
         socket->write(httpResponse("no signal", "text/plain", 503, "Service Unavailable"));
 #endif
@@ -422,6 +334,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
+    // ---------- 404 ----------
     socket->write(httpResponse("404 from default handler", "text/plain", 404, "Not Found"));
     socket->disconnectFromHost();
 }
