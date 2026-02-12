@@ -1,15 +1,12 @@
 #include "httpserver.h"
 
-#include <QCoreApplication>
 #include <QTcpServer>
 #include <QTcpSocket>
-#include <QHostAddress>
+#include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QDir>
-#include <QProcess>
-#include <QThread>
 
 // Вспомогательный HTTP-ответ
 static QByteArray httpResponse(const QByteArray &body,
@@ -19,7 +16,6 @@ static QByteArray httpResponse(const QByteArray &body,
 {
     QByteArray resp;
     resp.reserve(128 + body.size());
-
     resp += "HTTP/1.1 ";
     resp += QByteArray::number(statusCode);
     resp += " ";
@@ -30,7 +26,6 @@ static QByteArray httpResponse(const QByteArray &body,
     resp += QByteArray::number(body.size());
     resp += "\r\n\r\n";
     resp += body;
-
     return resp;
 }
 
@@ -53,7 +48,6 @@ static void proxyHttpStream(QTcpSocket *client,
     req += " HTTP/1.1\r\nHost: ";
     req += host.toUtf8();
     req += "\r\nConnection: close\r\n\r\n";
-
     upstream.write(req);
     upstream.flush();
 
@@ -82,30 +76,36 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
             this, &HttpServer::onNewConnection);
 
 #ifdef Q_OS_LINUX
-    // Автоматический запуск видеосервисов только на Linux / Raspberry OS.
-    // Здесь мы запускаем два внешних процесса:
-    // 1) libcamera-vid (CSI, MJPEG) -> stdout
-    // 2) python3 -m mjpeg_http_streamer -> HTTP MJPEG на порту 8081
-    //
-    // Аналогично для стереокамеры на порту 8082.
-    //
-    // См. учебные примеры по Picamera2/libcamera и mjpeg_http_streamer [web:21][web:25].
+    // Автоматический запуск видеосервисов только на Linux / Raspberry Pi.
 
-    // CSI camera (ID 0, пример команды — подстрой под свою конфигурацию)
+    // CSI camera: libcamera-vid (MJPEG) -> mjpeg_http_streamer на 127.0.0.1:8081
     m_procCsi.setProgram("bash");
     m_procCsi.setArguments({
-        "-c",
-        "libcamera-vid -t 0 --codec mjpeg -n -o - "
+        "-lc",
+        "libcamera-vid "
+        "--camera 0 "
+        "--width 1280 --height 720 "
+        "--framerate 20 "
+        "--codec mjpeg "
+        "--quality 70 "
+        "--timeout 0 "
+        "--nopreview "
+        "-o - "
         "| python3 -m mjpeg_http_streamer -l 127.0.0.1 -p 8081"
     });
     m_procCsi.setProcessChannelMode(QProcess::MergedChannels);
-    m_procCsi.startDetached(); // запускаем как фоновой процесс
+    m_procCsi.startDetached();
 
-    // Stereo camera (условно ID 1, либо отдельная конфигурация)
+    // Stereo USB camera: /dev/video8 (MJPEG) -> mjpeg_http_streamer на 127.0.0.1:8082
     m_procStereo.setProgram("bash");
     m_procStereo.setArguments({
-        "-c",
-        "libcamera-vid -t 0 --codec mjpeg -n -o - "
+        "-lc",
+        "ffmpeg "
+        "-f v4l2 -input_format mjpeg "
+        "-framerate 20 "
+        "-video_size 1280x720 "
+        "-i /dev/video8 "
+        "-f mjpeg -q:v 5 - "
         "| python3 -m mjpeg_http_streamer -l 127.0.0.1 -p 8082"
     });
     m_procStereo.setProcessChannelMode(QProcess::MergedChannels);
@@ -171,15 +171,12 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     if (headerEnd >= 0 && headerEnd + 4 < request.size())
         body = request.mid(headerEnd + 4);
 
-    QString wwwRoot =
-        QCoreApplication::applicationDirPath() + QStringLiteral("/www");
-
+    QString wwwRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/www");
     if (!QDir(wwwRoot).exists()) {
         wwwRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/../www");
     }
 
     // ---------- MJPEG-видео (прокси) ----------
-
     if (method == "GET" && path == "/video/csi") {
 #ifdef Q_OS_LINUX
         proxyHttpStream(socket, QStringLiteral("127.0.0.1"), 8081, "/stream");
@@ -201,12 +198,10 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     }
 
     // ---------- Статический index.html ----------
-
     if (method == "GET" && (path == "/" || path == "/index.html")) {
         QFile f(wwwRoot + "/index.html");
         if (!f.open(QIODevice::ReadOnly)) {
-            socket->write(httpResponse("index.html not found",
-                                       "text/plain", 404, "Not Found"));
+            socket->write(httpResponse("index.html not found", "text/plain", 404, "Not Found"));
         } else {
             const QByteArray data = f.readAll();
             socket->write(httpResponse(data, "text/html"));
@@ -216,13 +211,11 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     }
 
     // ---------- Статические js ----------
-
     if (method == "GET" && path.startsWith("/js/")) {
         const QString name = QString::fromUtf8(path.mid(4));
         QFile f(wwwRoot + "/js/" + name);
         if (!f.open(QIODevice::ReadOnly)) {
-            socket->write(httpResponse("js not found",
-                                       "text/plain", 404, "Not Found"));
+            socket->write(httpResponse("js not found", "text/plain", 404, "Not Found"));
         } else {
             const QByteArray data = f.readAll();
             socket->write(httpResponse(data, "application/javascript"));
@@ -232,7 +225,6 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     }
 
     // ---------- API: status ----------
-
     if (method == "GET" && path == "/api/status") {
         const QJsonDocument doc(m_model->makeStatusJson());
         const QByteArray data = doc.toJson(QJsonDocument::Compact);
@@ -242,7 +234,6 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     }
 
     // ---------- API: joint_state ----------
-
     if (method == "GET" && path == "/api/joint_state") {
         const QJsonDocument doc(m_model->makeJointStateJson());
         const QByteArray data = doc.toJson(QJsonDocument::Compact);
@@ -252,10 +243,9 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     }
 
     // ---------- API: base ----------
-
     if (method == "POST" && path == "/api/base") {
         const QJsonDocument doc = QJsonDocument::fromJson(body);
-        const QJsonObject  obj = doc.object();
+        const QJsonObject obj = doc.object();
 
         const bool emergency = obj.value(QStringLiteral("emergency")).toBool(false);
         if (emergency) {
@@ -268,19 +258,16 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
 
         QJsonObject reply;
         reply.insert(QStringLiteral("ok"), true);
-        const QByteArray data =
-            QJsonDocument(reply).toJson(QJsonDocument::Compact);
-
+        const QByteArray data = QJsonDocument(reply).toJson(QJsonDocument::Compact);
         socket->write(httpResponse(data, "application/json"));
         socket->disconnectFromHost();
         return;
     }
 
     // ---------- API: arm ----------
-
     if (method == "POST" && path == "/api/arm") {
         const QJsonDocument doc = QJsonDocument::fromJson(body);
-        const QJsonObject  obj = doc.object();
+        const QJsonObject obj = doc.object();
 
         const double ext    = obj.value(QStringLiteral("extend")).toDouble();
         const double grip   = obj.value(QStringLiteral("gripper")).toDouble();
@@ -292,17 +279,14 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
 
         QJsonObject reply;
         reply.insert(QStringLiteral("ok"), true);
-        const QByteArray data =
-            QJsonDocument(reply).toJson(QJsonDocument::Compact);
-
+        const QByteArray data = QJsonDocument(reply).toJson(QJsonDocument::Compact);
         socket->write(httpResponse(data, "application/json"));
         socket->disconnectFromHost();
         return;
     }
 
     // ---------- Неизвестный маршрут ----------
-
-    socket->write(httpResponse("404 from default handler",
-                               "text/plain", 404, "Not Found"));
+    socket->write(httpResponse("404 from default handler", "text/plain", 404, "Not Found"));
     socket->disconnectFromHost();
 }
+
