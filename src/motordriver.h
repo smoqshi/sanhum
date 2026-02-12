@@ -1,10 +1,12 @@
-#pragma once
+#ifndef MOTORDRIVER_H
+#define MOTORDRIVER_H
 
 #include <QObject>
 #include <QTimer>
-#include <atomic>
 
-// Направление мотора
+struct gpiod_chip;
+struct gpiod_line;
+
 enum class MotorDirection {
     Stop,
     Forward,
@@ -18,47 +20,37 @@ public:
     explicit MotorDriver(QObject *parent = nullptr);
     ~MotorDriver();
 
-    // Управление моторами.
-    // speed_percent: 0..100 (модуль скорости), направление задаётся MotorDirection.
-    void setLeftMotor(MotorDirection dir, int speed_percent);
-    void setRightMotor(MotorDirection dir, int speed_percent);
+    void setLeftMotor(MotorDirection dir, int dutyPercent);
+    void setRightMotor(MotorDirection dir, int dutyPercent);
 
-private slots:
-    void pwmTick(); // периодический тик софт‑PWM
+    // вызывать периодически (у тебя уже висит QTimer с 1 мс)
+    void pwmTick();
 
 private:
-    // ===== НОМЕРА GPIO (ПОДСТАВЬ СВОИ, ЕСЛИ ДРУГИЕ) =====
-    int m_leftIn1;   // например GPIO25
-    int m_leftIn2;   // например GPIO8
-    int m_rightIn1;  // например GPIO7
-    int m_rightIn2;  // например GPIO1
+    // libgpiod
+    gpiod_chip *m_chip;
 
-    // файловые дескрипторы /sys/class/gpio/.../value
-    int m_leftFdIn1;
-    int m_leftFdIn2;
-    int m_rightFdIn1;
-    int m_rightFdIn2;
+    gpiod_line *m_in1;
+    gpiod_line *m_in2;
+    gpiod_line *m_in3;
+    gpiod_line *m_in4;
+    gpiod_line *m_ena;
+    gpiod_line *m_enb;
 
-    // Параметры PWM
-    std::atomic<int>          m_leftDuty;   // 0..100
-    std::atomic<int>          m_rightDuty;  // 0..100
-    std::atomic<MotorDirection> m_leftDir;
-    std::atomic<MotorDirection> m_rightDir;
+    // внутреннее состояние PWM
+    MotorDirection m_leftDir;
+    MotorDirection m_rightDir;
+    int m_leftDuty;   // 0..100
+    int m_rightDuty;  // 0..100
 
-    int    m_phase;    // 0..99 – фаза PWM
-    QTimer m_pwmTimer;
+    int m_pwmCounter;    // 0..PWM_PERIOD-1
+    static constexpr int PWM_PERIOD = 100; // 100 шагов = 1 кГц при тике 10 мкс, но мы тикаем 1мс => 10 Гц, нам ок
 
-    // Вспомогательные методы работы с sysfs GPIO
-    int  exportGpio(int gpio);
-    int  setGpioDirection(int gpio, bool output);
-    int  openGpioValue(int gpio);
-    void writeGpio(int fd, bool value);
-
-    // Применить один шаг PWM к конкретному мосту
-    void applyPhaseForMotor(int fdA,
-                            int fdB,
-                            MotorDirection dir,
-                            int duty,
-                            int phase);
+    // внутренняя инициализация
+    bool initLines();
+    void setLine(gpiod_line *line, int value);
+    void updateBridgeSide(MotorDirection dir, int duty, gpiod_line *inA, gpiod_line *inB, gpiod_line *en);
 };
+
+#endif // MOTORDRIVER_H
 
