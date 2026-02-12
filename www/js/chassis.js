@@ -9,7 +9,6 @@ export function initChassis(canvas) {
   tank.canvasWidth = canvas.width;
   tank.canvasHeight = canvas.height;
 
-  // Центр симуляции — центр холста
   tank.x = tank.canvasWidth * 0.5;
   tank.y = tank.canvasHeight * 0.5;
 
@@ -42,7 +41,7 @@ export function drawChassis(ctx) {
   ctx.fill();
   ctx.stroke();
 
-  // кабина спереди
+  // кабина
   const cabW = 28;
   const cabH = 44;
 
@@ -64,7 +63,7 @@ export function drawChassis(ctx) {
     cabH - 8
   );
 
-  // задняя платформа под манипулятор
+  // платформа
   const bedW = hullW * 0.55;
   const bedX = -hullW / 2;
   ctx.fillStyle = "#0b1120";
@@ -123,5 +122,4 @@ export function updateBase(dt) {
   tank.trackPhaseLeft = (tank.trackPhaseLeft ?? 0) + vL * k * dt;
   tank.trackPhaseRight = (tank.trackPhaseRight ?? 0) + vR * k * dt;
 }
-
 
