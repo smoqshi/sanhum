@@ -1,6 +1,9 @@
 #include "robotmodel.h"
 #include "motordriver.h"
 
+#include <QFile>
+#include <QIODevice>
+#include <QByteArray>
 #include <QtGlobal>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -183,4 +186,5 @@ QJsonObject RobotModel::makeJointStateJson() const
 
     return obj;
 }
+
 
