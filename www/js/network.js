@@ -7,13 +7,15 @@ export function initNetwork() {
             pollStatus();
         });
     }
-    // Видео временно отключено, никаких обработчиков для <img> не вешаем
 }
 
 export async function pollStatus() {
     try {
         const r = await fetch('/api/status');
-        if (!r.ok) return;
+        if (!r.ok) {
+            console.warn('pollStatus: HTTP', r.status);
+            return;
+        }
         const d = await r.json();
 
         const wifiSsid = document.getElementById('statusWifiSsid');
@@ -55,19 +57,19 @@ export async function pollStatus() {
         }
         if (currentTotal) {
             const v = d.current_total_a;
-            currentTotal.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A';
+            currentTotal.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A`;
         }
         if (current5V) {
             const v = d.current_5v_a;
-            current5V.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A';
+            current5V.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A`;
         }
         if (current12V) {
             const v = d.current_12v_a;
-            current12V.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A';
+            current12V.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A`;
         }
         if (currentMotors) {
             const v = d.current_motors_a;
-            currentMotors.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A';
+            currentMotors.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A`;
         }
         if (currentGpio) {
             const v = d.current_gpio_ma;
@@ -106,10 +108,12 @@ export async function sendArmCommand(extend, gripper, turretAngle) {
 export async function pollJointState() {
     try {
         const r = await fetch('/api/joint_state');
-        if (!r.ok) return;
+        if (!r.ok) {
+            console.warn('pollJointState: HTTP', r.status);
+            return;
+        }
         const d = await r.json();
 
-        // сервер отдаёт плоский объект: { turret_deg, arm_ext, gripper }
         if (typeof d.turret_deg === 'number') {
             tank.turretAngle = d.turret_deg;
         }
@@ -123,3 +127,4 @@ export async function pollJointState() {
         console.error('pollJointState error', e);
     }
 }
+
