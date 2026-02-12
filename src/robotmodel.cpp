@@ -54,15 +54,14 @@ void RobotModel::setBaseCommand(double v, double w)
 void RobotModel::step(double dt)
 {
     Q_UNUSED(dt);
-
     if (m_emergency) {
         m_motorDriver.setLeftMotor(MotorDirection::Stop, 0);
         m_motorDriver.setRightMotor(MotorDirection::Stop, 0);
         return;
     }
 
-    const double maxWheelLinear = 0.5;   // м/с при duty 100%
-    const double halfTrack      = 0.15;  // плечо базы, м
+    const double maxWheelLinear = 0.5;
+    const double halfTrack      = 0.15;
 
     const double vL = m_v - m_w * halfTrack;
     const double vR = m_v + m_w * halfTrack;
@@ -95,7 +94,11 @@ void RobotModel::step(double dt)
 
     m_motorDriver.setLeftMotor(left.first, left.second);
     m_motorDriver.setRightMotor(right.first, right.second);
+
+    qDebug() << "Step: nL=" << nL << "nR=" << nR
+             << "dutyL=" << left.second << "dutyR=" << right.second;
 }
+
 
 // ===== МАНИПУЛЯТОР =====
 
@@ -282,6 +285,7 @@ QJsonObject RobotModel::makeJointStateJson() const
     obj.insert(QStringLiteral("gripper"),    m_grip);
     return obj;
 }
+
 
 
 
