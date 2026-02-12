@@ -4,14 +4,11 @@
 #include <QFile>
 #include <QIODevice>
 #include <QByteArray>
-#include <QtGlobal>
 #include <QJsonObject>
-#include <QJsonArray>
-#include <QSysInfo>
-#include <QProcess>
-
+#include <QtMath>
+#include <QTextStream>
+#include <QRegularExpression>
 #include <algorithm>
-#include <cmath>
 
 // Конструктор/деструктор
 RobotModel::RobotModel(QObject *parent)
@@ -32,6 +29,7 @@ RobotModel::RobotModel(QObject *parent)
 RobotModel::~RobotModel() = default;
 
 // ===== АВАРИЙНАЯ ОСТАНОВКА =====
+
 void RobotModel::emergencyStop()
 {
     m_emergency = true;
@@ -51,6 +49,7 @@ void RobotModel::setBaseCommand(double v, double w)
 }
 
 // ===== ГЛАВНЫЙ ШАГ МОДЕЛИ БАЗЫ =====
+
 void RobotModel::step(double dt)
 {
     Q_UNUSED(dt);
@@ -61,9 +60,11 @@ void RobotModel::step(double dt)
         return;
     }
 
-    const double maxWheelLinear = 0.5;
-    const double halfTrack = 0.15;
+    // Максимальная линейная скорость колеса и "полухаус" базы
+    const double maxWheelLinear = 0.5;   // м/с при duty=100%
+    const double halfTrack      = 0.15;  // плечо базы, м
 
+    // Преобразование команды (v, w) в скорости левого/правого колеса
     const double vL = m_v - m_w * halfTrack;
     const double vR = m_v + m_w * halfTrack;
 
@@ -74,6 +75,7 @@ void RobotModel::step(double dt)
         nR = vR / maxWheelLinear;
     }
 
+    // Ограничение -1..1
     nL = std::max(-1.0, std::min(1.0, nL));
     nR = std::max(-1.0, std::min(1.0, nR));
 
@@ -86,9 +88,7 @@ void RobotModel::step(double dt)
         else
             dir = MotorDirection::Stop;
 
-        const int duty =
-            static_cast<int>(std::lround(std::fabs(norm) * 100.0));
-
+        const int duty = static_cast<int>(std::lround(std::fabs(norm) * 100.0));
         return std::make_pair(dir, duty);
     };
 
@@ -103,19 +103,15 @@ void RobotModel::step(double dt)
 
 void RobotModel::setArmExtension(double ext01)
 {
-    if (ext01 < 0.0)
-        ext01 = 0.0;
-    if (ext01 > 1.0)
-        ext01 = 1.0;
+    if (ext01 < 0.0) ext01 = 0.0;
+    if (ext01 > 1.0) ext01 = 1.0;
     m_ext = ext01;
 }
 
 void RobotModel::setGripper(double grip01)
 {
-    if (grip01 < 0.0)
-        grip01 = 0.0;
-    if (grip01 > 1.0)
-        grip01 = 1.0;
+    if (grip01 < 0.0) grip01 = 0.0;
+    if (grip01 > 1.0) grip01 = 1.0;
     m_grip = grip01;
 }
 
@@ -141,37 +137,152 @@ static bool isRunningOnRaspberry()
 #endif
 }
 
+static double readCpuTempC()
+{
+#ifdef Q_OS_LINUX
+    QFile f("/sys/class/thermal/thermal_zone0/temp");
+    if (f.open(QIODevice::ReadOnly)) {
+        QByteArray b = f.readAll().trimmed();
+        bool ok = false;
+        const double milli = b.toDouble(&ok);
+        if (ok) {
+            return milli / 1000.0;
+        }
+    }
+#endif
+    return 0.0;
+}
+
+static double readBoardTempC()
+{
+    // Для упрощения используем ту же зону, в реальном проекте
+    // можно привязать к датчику на плате робота.
+#ifdef Q_OS_LINUX
+    return readCpuTempC();
+#else
+    return 0.0;
+#endif
+}
+
+static double readCpuLoadPercent()
+{
+#ifdef Q_OS_LINUX
+    QFile f("/proc/loadavg");
+    if (f.open(QIODevice::ReadOnly)) {
+        QTextStream ts(&f);
+        double l1 = 0.0;
+        ts >> l1;
+        // Оценка: 1.0 нагрузки ~ 100% на одноядерной системе
+        return std::clamp(l1 * 100.0, 0.0, 400.0);
+    }
+#endif
+    return 0.0;
+}
+
+static void readWifiInfo(QString &ssidOut, int &rssiOut)
+{
+    ssidOut = QStringLiteral("--");
+    rssiOut = 0;
+
+#ifdef Q_OS_LINUX
+    // Простейший вариант: парсим вывод iwconfig wlan0
+    QProcess proc;
+    proc.start("iwconfig", QStringList() << "wlan0");
+    if (!proc.waitForFinished(200)) {
+        return;
+    }
+    const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput());
+
+    // ESSID:"..."  и  Signal level=-60 dBm
+    QRegularExpression essidRe(R"(ESSID:\"([^\"]*)\")");
+    QRegularExpression sigRe(R"(Signal level=([-0-9]+)\s*dBm)");
+
+    auto m1 = essidRe.match(out);
+    if (m1.hasMatch()) {
+        ssidOut = m1.captured(1);
+    }
+
+    auto m2 = sigRe.match(out);
+    if (m2.hasMatch()) {
+        bool ok = false;
+        int val = m2.captured(1).toInt(&ok);
+        if (ok) {
+            rssiOut = val;
+        }
+    }
+#endif
+}
+
+static double readBatteryVoltage()
+{
+    // Здесь должен быть реальный код чтения АЦП/платы питания.
+    // Пока оставим значение из модели, если оно задано.
+    return 0.0;
+}
+
 // ===== JSON ДЛЯ WEB‑КЛИЕНТА =====
 
 QJsonObject RobotModel::makeStatusJson() const
 {
     QJsonObject obj;
+
     obj.insert(QStringLiteral("emergency"), m_emergency);
-
-    // Базовые величины
-    obj.insert(QStringLiteral("battery_v"), m_batteryV);
-    obj.insert(QStringLiteral("cpu_temp_c"), m_cpuTemp);
-    obj.insert(QStringLiteral("board_temp_c"), m_boardTemp);
-
-    // Заглушки по умолчанию
-    obj.insert(QStringLiteral("cpu_load_percent"), 0.0);
-    obj.insert(QStringLiteral("current_total_a"), 0.0);
-    obj.insert(QStringLiteral("current_5v_a"), 0.0);
-    obj.insert(QStringLiteral("current_12v_a"), 0.0);
-    obj.insert(QStringLiteral("current_motors_a"), 0.0);
-    obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
-    obj.insert(QStringLiteral("wifi_ssid"), QStringLiteral("--"));
-    obj.insert(QStringLiteral("wifi_rssi_dbm"), 0);
 
 #ifdef Q_OS_LINUX
     if (isRunningOnRaspberry()) {
-        // здесь по учебникам/документации Raspberry OS читаются реальные файлы
-        // /sys/class/thermal/..., /proc/loadavg, /proc/net/wireless и т.п.
-        // сейчас оставляю как заготовку
+        // CPU / плата
+        const double cpuTemp   = readCpuTempC();
+        const double boardTemp = readBoardTempC();
+        const double cpuLoad   = readCpuLoadPercent();
+
+        obj.insert(QStringLiteral("cpu_temp_c"), cpuTemp);
+        obj.insert(QStringLiteral("board_temp_c"), boardTemp);
+        obj.insert(QStringLiteral("cpu_load_percent"), cpuLoad);
+
+        // Питание — здесь можно заменить на чтение с реальной платы
+        const double batt = (m_batteryV > 0.0) ? m_batteryV : readBatteryVoltage();
+        obj.insert(QStringLiteral("battery_v"), batt);
+
+        // Токи — placeholders до подключения реальных датчиков тока
+        obj.insert(QStringLiteral("current_total_a"), 0.0);
+        obj.insert(QStringLiteral("current_5v_a"),    0.0);
+        obj.insert(QStringLiteral("current_12v_a"),   0.0);
+        obj.insert(QStringLiteral("current_motors_a"),0.0);
+        obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
+
+        // Wi‑Fi
+        QString ssid;
+        int rssi = 0;
+        readWifiInfo(ssid, rssi);
+        obj.insert(QStringLiteral("wifi_ssid"), ssid);
+        obj.insert(QStringLiteral("wifi_rssi_dbm"), rssi);
+    } else {
+        // Не Raspberry под Linux: можно вернуть только модельные значения
+        obj.insert(QStringLiteral("cpu_temp_c"),   m_cpuTemp);
+        obj.insert(QStringLiteral("board_temp_c"), m_boardTemp);
+        obj.insert(QStringLiteral("cpu_load_percent"), 0.0);
+        obj.insert(QStringLiteral("battery_v"),    m_batteryV);
+        obj.insert(QStringLiteral("current_total_a"), 0.0);
+        obj.insert(QStringLiteral("current_5v_a"),    0.0);
+        obj.insert(QStringLiteral("current_12v_a"),   0.0);
+        obj.insert(QStringLiteral("current_motors_a"),0.0);
+        obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
+        obj.insert(QStringLiteral("wifi_ssid"), QStringLiteral("--"));
+        obj.insert(QStringLiteral("wifi_rssi_dbm"), 0);
     }
 #else
-    // Windows: можно взять температуру/нагрузку через WMI/PowerShell,
-    // но это выходит за рамки учебного примера, оставляем заглушки.
+    // Windows / другие системы — используем только модельные поля
+    obj.insert(QStringLiteral("cpu_temp_c"),   m_cpuTemp);
+    obj.insert(QStringLiteral("board_temp_c"), m_boardTemp);
+    obj.insert(QStringLiteral("cpu_load_percent"), 0.0);
+    obj.insert(QStringLiteral("battery_v"),    m_batteryV);
+    obj.insert(QStringLiteral("current_total_a"), 0.0);
+    obj.insert(QStringLiteral("current_5v_a"),    0.0);
+    obj.insert(QStringLiteral("current_12v_a"),   0.0);
+    obj.insert(QStringLiteral("current_motors_a"),0.0);
+    obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
+    obj.insert(QStringLiteral("wifi_ssid"), QStringLiteral("--"));
+    obj.insert(QStringLiteral("wifi_rssi_dbm"), 0);
 #endif
 
     return obj;
@@ -181,10 +292,7 @@ QJsonObject RobotModel::makeJointStateJson() const
 {
     QJsonObject obj;
     obj.insert(QStringLiteral("turret_deg"), m_turretDeg);
-    obj.insert(QStringLiteral("arm_ext"), m_ext);
-    obj.insert(QStringLiteral("gripper"), m_grip);
-
+    obj.insert(QStringLiteral("arm_ext"),    m_ext);
+    obj.insert(QStringLiteral("gripper"),    m_grip);
     return obj;
 }
-
-
