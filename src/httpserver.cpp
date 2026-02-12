@@ -1,12 +1,19 @@
 #include "httpserver.h"
+#include "robotmodel.h"
 
-#include <QTcpServer>
-#include <QTcpSocket>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QThread>
+
+#ifdef Q_OS_LINUX
+#include <QProcess>
+#endif
+
+#include <QTcpServer>
+#include <QTcpSocket>
 
 // Вспомогательный HTTP-ответ
 static QByteArray httpResponse(const QByteArray &body,
@@ -29,7 +36,7 @@ static QByteArray httpResponse(const QByteArray &body,
     return resp;
 }
 
-// Упрощённый прокси одного HTTP-потока (используется для MJPEG)
+// Прокси для HTTP-потока (используется для CSI через локальный MJPEG-сервер)
 static void proxyHttpStream(QTcpSocket *client,
                             const QString &host,
                             quint16 port,
@@ -51,7 +58,6 @@ static void proxyHttpStream(QTcpSocket *client,
     upstream.write(req);
     upstream.flush();
 
-    // Считываем и просто прокидываем всё, что пришло
     while (upstream.state() == QAbstractSocket::ConnectedState) {
         if (!upstream.waitForReadyRead(500))
             continue;
@@ -70,15 +76,15 @@ static void proxyHttpStream(QTcpSocket *client,
 
 HttpServer::HttpServer(RobotModel *model, QObject *parent)
     : QObject(parent)
+    , m_server(this)
     , m_model(model)
 {
     connect(&m_server, &QTcpServer::newConnection,
             this, &HttpServer::onNewConnection);
 
 #ifdef Q_OS_LINUX
-    // Автоматический запуск видеосервисов только на Linux / Raspberry Pi.
+    // --- CSI камера: как в исходном проекте, libcamera-vid -> локальный HTTP (8081) ---
 
-    // CSI camera: libcamera-vid (MJPEG) -> mjpeg_http_streamer на 127.0.0.1:8081
     m_procCsi.setProgram("bash");
     m_procCsi.setArguments({
         "-lc",
@@ -96,20 +102,39 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
     m_procCsi.setProcessChannelMode(QProcess::MergedChannels);
     m_procCsi.startDetached();
 
-    // Stereo USB camera: /dev/video8 (MJPEG) -> mjpeg_http_streamer на 127.0.0.1:8082
-    m_procStereo.setProgram("bash");
+    // --- Stereo USB камера: ffmpeg -> stdout, читаем в Qt и отдаём MJPEG сами ---
+
+    m_procStereo.setProgram("ffmpeg");
     m_procStereo.setArguments({
-        "-lc",
-        "ffmpeg "
-        "-f v4l2 -input_format mjpeg "
-        "-framerate 20 "
-        "-video_size 1280x720 "
-        "-i /dev/video8 "
-        "-f mjpeg -q:v 5 - "
-        "| python3 -m mjpeg_http_streamer -l 127.0.0.1 -p 8082"
+        "-f", "v4l2",
+        "-input_format", "mjpeg",
+        "-framerate", "20",
+        "-video_size", "1280x720",
+        "-i", "/dev/video8",
+        "-f", "mjpeg",
+        "-q:v", "5",
+        "pipe:1"
     });
-    m_procStereo.setProcessChannelMode(QProcess::MergedChannels);
-    m_procStereo.startDetached();
+    m_procStereo.setProcessChannelMode(QProcess::SeparateChannels);
+
+    connect(&m_procStereo, &QProcess::readyReadStandardOutput, this, [this]() {
+        // Дописываем новые байты
+        m_lastStereoFrame += m_procStereo.readAllStandardOutput();
+
+        // Ищем последний полный JPEG по маркерам FF D8 ... FF D9
+        int start = m_lastStereoFrame.lastIndexOf("\xFF\xD8");
+        int end   = m_lastStereoFrame.lastIndexOf("\xFF\xD9");
+        if (start >= 0 && end > start) {
+            QByteArray frame = m_lastStereoFrame.mid(start, end - start + 2);
+            // сохраняем только последний полный кадр
+            m_lastStereoFrame = frame;
+        } else if (start > 0) {
+            // Отбрасываем мусор до начала потенциального JPEG
+            m_lastStereoFrame = m_lastStereoFrame.mid(start);
+        }
+    });
+
+    m_procStereo.start();
 #endif
 }
 
@@ -176,7 +201,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         wwwRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/../www");
     }
 
-    // ---------- MJPEG-видео (прокси) ----------
+    // ---------- MJPEG-видео: CSI через прокси ----------
     if (method == "GET" && path == "/video/csi") {
 #ifdef Q_OS_LINUX
         proxyHttpStream(socket, QStringLiteral("127.0.0.1"), 8081, "/stream");
@@ -187,17 +212,42 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
+    // ---------- MJPEG-видео: Stereo USB /dev/video8, отдаём сами ----------
     if (method == "GET" && path == "/video/stereo") {
 #ifdef Q_OS_LINUX
-        proxyHttpStream(socket, QStringLiteral("127.0.0.1"), 8082, "/stream");
+        socket->write(
+            "HTTP/1.1 200 OK\r\n"
+            "Connection: close\r\n"
+            "Cache-Control: no-cache\r\n"
+            "Pragma: no-cache\r\n"
+            "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n"
+        );
+
+        while (socket->state() == QAbstractSocket::ConnectedState) {
+            if (!m_lastStereoFrame.isEmpty()) {
+                QByteArray header;
+                header += "--frame\r\n";
+                header += "Content-Type: image/jpeg\r\n";
+                header += "Content-Length: ";
+                header += QByteArray::number(m_lastStereoFrame.size());
+                header += "\r\n\r\n";
+                socket->write(header);
+                socket->write(m_lastStereoFrame);
+                socket->write("\r\n");
+                socket->flush();
+            }
+            QThread::msleep(50); // ~20 кадров в секунду
+            if (!socket->waitForBytesWritten(10))
+                break;
+        }
 #else
         socket->write(httpResponse("no signal", "text/plain", 503, "Service Unavailable"));
-        socket->disconnectFromHost();
 #endif
+        socket->disconnectFromHost();
         return;
     }
 
-    // ---------- Статический index.html ----------
+    // ---------- index.html ----------
     if (method == "GET" && (path == "/" || path == "/index.html")) {
         QFile f(wwwRoot + "/index.html");
         if (!f.open(QIODevice::ReadOnly)) {
@@ -210,7 +260,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- Статические js ----------
+    // ---------- статика js ----------
     if (method == "GET" && path.startsWith("/js/")) {
         const QString name = QString::fromUtf8(path.mid(4));
         QFile f(wwwRoot + "/js/" + name);
@@ -285,8 +335,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         return;
     }
 
-    // ---------- Неизвестный маршрут ----------
+    // ---------- 404 ----------
     socket->write(httpResponse("404 from default handler", "text/plain", 404, "Not Found"));
     socket->disconnectFromHost();
 }
-
