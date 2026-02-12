@@ -1,7 +1,7 @@
-import { initNetwork, pollStatus } from './network.js';
+import { initNetwork, pollStatus, pollJointState } from './network.js';
 import { initChassis, drawChassis, updateBase } from './chassis.js';
 import { initManipulator, drawManipulator } from './manipulator.js';
-import { initUI, updateControls } from './uiControls.js';
+import { initUI, updateControls, updateDashboardFromState } from './uiControls.js';
 
 let canvas, ctx;
 let lastTime = 0;
@@ -20,19 +20,24 @@ function init() {
     initUI();
 
     requestAnimationFrame(loop);
+
+    // периодический опрос статуса и суставов
     setInterval(pollStatus, 500);
+    setInterval(pollJointState, 200);
 }
 
 function loop(timestamp) {
     const dt = (timestamp - lastTime) / 1000;
     lastTime = timestamp;
 
-    updateControls(dt);
-    updateBase(dt);
+    updateControls(dt);        // обновление команд оператора
+    updateBase(dt);            // интеграция движения базы
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawChassis(ctx);
-    drawManipulator(ctx);
+    drawChassis(ctx);          // отрисовка корпуса
+    drawManipulator(ctx);      // отрисовка манипулятора
+
+    updateDashboardFromState(); // обновление правого блока
 
     requestAnimationFrame(loop);
 }

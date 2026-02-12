@@ -1,17 +1,21 @@
 import { tank } from './robotState.js';
 
-// корпус шире, кабина спереди, платформа сзади
-const hullW = 160;
-const hullH = 100;
+// уменьшенный корпус, кабина спереди, платформа сзади
+const hullW = 100;  // было 160
+const hullH = 60;   // было 100
 
 export function initChassis(canvas) {
-    tank.canvasWidth  = canvas.width;
+    tank.canvasWidth = canvas.width;
     tank.canvasHeight = canvas.height;
 
+    // Центр симуляции — центр холста
     tank.x = tank.canvasWidth * 0.5;
     tank.y = tank.canvasHeight * 0.5;
 
-    if (tank.trackPhaseLeft === undefined)  tank.trackPhaseLeft  = 0;
+    // Повернём робота носом вверх (нос вдоль +X, heading = +90°)
+    tank.heading = Math.PI / 2;
+
+    if (tank.trackPhaseLeft === undefined) tank.trackPhaseLeft = 0;
     if (tank.trackPhaseRight === undefined) tank.trackPhaseRight = 0;
 }
 
@@ -29,16 +33,16 @@ export function drawChassis(ctx) {
     ctx.lineWidth = 2;
     ctx.beginPath();
     if (ctx.roundRect) {
-        ctx.roundRect(-hullW / 2, -hullH / 2, hullW, hullH, 8);
+        ctx.roundRect(-hullW / 2, -hullH / 2, hullW, hullH, 6);
     } else {
         ctx.rect(-hullW / 2, -hullH / 2, hullW, hullH);
     }
     ctx.fill();
     ctx.stroke();
 
-    // кабина спереди
-    const cabW = 40;
-    const cabH = 80;
+    // кабина спереди (по +X)
+    const cabW = 28;
+    const cabH = 44;
     ctx.fillStyle = "#1f2937";
     ctx.beginPath();
     if (ctx.roundRect) {
@@ -51,10 +55,10 @@ export function drawChassis(ctx) {
 
     ctx.fillStyle = "#60a5fa";
     ctx.fillRect(
-        hullW / 2 - cabW + 4,
-        -cabH / 2 + 4,
-        cabW - 8,
-        cabH - 10
+        hullW / 2 - cabW + 3,
+        -cabH / 2 + 3,
+        cabW - 6,
+        cabH - 8
     );
 
     // задняя платформа под манипулятор
@@ -63,15 +67,14 @@ export function drawChassis(ctx) {
     ctx.fillStyle = "#0b1120";
     ctx.fillRect(bedX, -hullH / 2 + 4, bedW, hullH - 8);
 
-    // гусеницы вдоль кузова (без "выступания")
+    // гусеницы вдоль корпуса
     const trackLen = hullW;
-    const seg = 12;
-
-    const phaseL = tank.trackPhaseLeft  ?? 0;
+    const seg = 8;
+    const phaseL = tank.trackPhaseLeft ?? 0;
     const phaseR = tank.trackPhaseRight ?? 0;
 
     ctx.strokeStyle = "#374151";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2;
 
     function drawTrack(y, phase) {
         ctx.beginPath();
@@ -83,18 +86,17 @@ export function drawChassis(ctx) {
         ctx.stroke();
     }
 
-    // размещаем ровно по нижней и верхней кромке корпуса
-    const trackOffsetY = hullH / 2 + 4;
+    const trackOffsetY = hullH / 2 + 3;
     drawTrack(-trackOffsetY, phaseL); // левая
-    drawTrack( trackOffsetY, phaseR); // правая
+    drawTrack(trackOffsetY, phaseR);  // правая
 
     // стрелка носа
     ctx.fillStyle = "#f97316";
     ctx.beginPath();
     const noseX = hullW / 2;
-    ctx.moveTo(noseX + 8, 0);
-    ctx.lineTo(noseX - 8, -10);
-    ctx.lineTo(noseX - 8,  10);
+    ctx.moveTo(noseX + 6, 0);
+    ctx.lineTo(noseX - 6, -8);
+    ctx.lineTo(noseX - 6, 8);
     ctx.closePath();
     ctx.fill();
 
@@ -102,26 +104,27 @@ export function drawChassis(ctx) {
 }
 
 export function updateBase(dt) {
-    const v = tank.vLinear;
-    const w = tank.vAngular;
+    // используем команды, а не прошлое состояние,
+    // чтобы анимация гусениц соответствовала input'у
+    const vCmd = tank.vLinearCmd;                 // м/с
+    const wCmd = tank.vAngularCmdDeg * Math.PI / 180.0; // рад/с
 
-    tank.heading += w * dt;
-    tank.x       += Math.cos(tank.heading) * v * dt;
-    tank.y       += Math.sin(tank.heading) * v * dt;
+    tank.vLinear = vCmd;
+    tank.vAngular = wCmd;
 
-    const cw = tank.canvasWidth;
-    const ch = tank.canvasHeight;
-    if (tank.x < 0) tank.x += cw;
-    if (tank.x > cw) tank.x -= cw;
-    if (tank.y < 0) tank.y += ch;
-    if (tank.y > ch) tank.y -= ch;
+    // вращение вокруг центра (без смещения x/y)
+    tank.heading += wCmd * dt;
 
-    // фазовая скорость для левой/правой гусеницы
+    // фазовая скорость для гусениц:
+    // vL = v - w*B, vR = v + w*B
     const B = 0.25; // "плечо" базы
-    const vL = v - w * B;
-    const vR = v + w * B;
+    const vL = vCmd - wCmd * B;
+    const vR = vCmd + wCmd * B;
 
-    const k = 40;
-    tank.trackPhaseLeft  = (tank.trackPhaseLeft  ?? 0) + vL * k * dt;
+    // увеличим коэффициент, чтобы при развороте на месте
+    // траки визуально быстро крутились
+    const k = 80;
+
+    tank.trackPhaseLeft = (tank.trackPhaseLeft ?? 0) + vL * k * dt;
     tank.trackPhaseRight = (tank.trackPhaseRight ?? 0) + vR * k * dt;
 }
