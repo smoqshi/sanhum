@@ -32,6 +32,7 @@ win32 {
 DISTFILES += \
     www/index.html \
     www/js/cameras.js \
+    www/js/webrtc.js \
     www/js/main.js \
     www/js/robotState.js \
     www/js/chassis.js \
@@ -48,6 +49,7 @@ win32 {
         QMAKE_POST_LINK += cp -r \"$$PWD/www\" \"$$OUT_PWD/www\"
     }
 }
+
 
 
 
