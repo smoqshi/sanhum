@@ -1,46 +1,35 @@
-#ifndef MOTORDRIVER_H
-#define MOTORDRIVER_H
+#include "motordriver.h"
+#include <QCoreApplication>
+#include <QProcess>
+#include <QDebug>
+#include <algorithm>
 
-#include <QObject>
-#include <gpiod.hpp>
-
-enum class MotorDirection {
-    Stop,
-    Forward,
-    Backward
-};
-
-class MotorDriver : public QObject
+static int dirToInt(MotorDirection d)
 {
-    Q_OBJECT
-public:
-    explicit MotorDriver(QObject *parent = nullptr);
-    ~MotorDriver();
+    switch (d) {
+    case MotorDirection::Forward:  return 1;
+    case MotorDirection::Backward: return -1;
+    case MotorDirection::Stop:
+    default:                       return 0;
+    }
+}
 
-    void setLeftMotor(MotorDirection dir, int dutyPercent);
-    void setRightMotor(MotorDirection dir, int dutyPercent);
-    void pwmTick();
+void MotorDriver::applyCommand()
+{
+    QString program = "python3";
 
-private:
-    gpiod::chip         m_chip;
-    gpiod::line_request m_request;
+    // бинарник лежит в корне проекта, src/motor_control.py — рядом относительно него
+    QString baseDir = QCoreApplication::applicationDirPath();
+    QString script  = baseDir + "/src/motor_control.py";
 
-    int m_idxIn1;
-    int m_idxIn2;
-    int m_idxIn3;
-    int m_idxIn4;
+    QStringList args;
+    args << script
+         << QString::number(dirToInt(m_leftDir))
+         << QString::number(dirToInt(m_rightDir))
+         << QString::number(m_leftDuty)
+         << QString::number(m_rightDuty);
 
-    MotorDirection m_leftDir;
-    MotorDirection m_rightDir;
-    int m_leftDuty;
-    int m_rightDuty;
-    int m_pwmCounter;
-    static constexpr int PWM_PERIOD = 100;
-
-    bool initRequest();
-    void setLine(int offset, int value);
-    void updateBridgeSide(MotorDirection dir, int duty,
-                          int offsetInA, int offsetInB);
-};
-
-#endif // MOTORDRIVER_H
+    QProcess *proc = new QProcess(this);
+    connect(proc, &QProcess::finished, proc, &QProcess::deleteLater);
+    proc->start(program, args);
+}
