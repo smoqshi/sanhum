@@ -1,5 +1,4 @@
 QT       += core gui network
-
 greaterThan(QT_MAJOR_VERSION, 5): QT += widgets
 
 TARGET = Sanhum
@@ -29,7 +28,8 @@ DISTFILES += \
     www/js/network.js \
     www/js/chassis.js \
     www/js/manipulator.js \
-    www/js/uiControls.js
+    www/js/uiControls.js \
+    www/js/main.js
 
 win32 {
     QMAKE_POST_LINK += xcopy /E /I /Y \"$$PWD\\www\" \"$$OUT_PWD\\www\" & echo.
