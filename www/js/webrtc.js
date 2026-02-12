@@ -12,10 +12,14 @@
       return;
     }
 
+    // Защита от отсутствия поддержки или незащищённого контекста
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('getUserMedia недоступен. Откройте страницу через https или http://localhost, и используйте современный браузер.');
+      return;
+    }
+
     try {
-      // Базовая конфигурация видеопотока, как в типичных учебных примерах WebRTC:
-      // 720p, 30 fps, без аудио.
-      // Такой шаблон используется в учебных материалах по WebRTC-захвату медиа.[web:24][web:21]
+      // 720p, 30 fps, без аудио
       localStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
@@ -31,7 +35,7 @@
       stopBtn.disabled = false;
     } catch (err) {
       console.error('Ошибка доступа к камере:', err);
-      alert('Не удалось получить доступ к камере. Убедитесь, что страница открыта по HTTPS или на localhost и что в браузере выдано разрешение на камеру.');
+      alert('Не удалось получить доступ к камере. Проверьте разрешения браузера и настройки устройства.');
     }
   }
 
