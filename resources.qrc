@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>src/motor_control.py</file>
+    </qresource>
+</RCC>
