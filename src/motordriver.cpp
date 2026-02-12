@@ -4,24 +4,20 @@
 #include <algorithm>
 #include <cmath>
 
-// Номера BCM GPIO по твоей схеме. При необходимости поменяй.
+// BCM GPIO под твою схему — поменяй на свои реально используемые номера
 static constexpr int GPIO_IN1 = 17;
 static constexpr int GPIO_IN2 = 27;
 static constexpr int GPIO_IN3 = 23;
 static constexpr int GPIO_IN4 = 24;
-static constexpr int GPIO_ENA = 22;
-static constexpr int GPIO_ENB = 18;
 
 MotorDriver::MotorDriver(QObject *parent)
     : QObject(parent)
-    , m_chip("gpiochip0")   // Pi 5: все GPIO2..27 на gpiochip0 [web:5][web:21]
-    , m_request()           // пока пустой
+    , m_chip("gpiochip0")
+    , m_request()
     , m_idxIn1(GPIO_IN1)
     , m_idxIn2(GPIO_IN2)
     , m_idxIn3(GPIO_IN3)
     , m_idxIn4(GPIO_IN4)
-    , m_idxEnA(GPIO_ENA)
-    , m_idxEnB(GPIO_ENB)
     , m_leftDir(MotorDirection::Stop)
     , m_rightDir(MotorDirection::Stop)
     , m_leftDuty(0)
@@ -50,16 +46,14 @@ MotorDriver::~MotorDriver()
 
 bool MotorDriver::initRequest()
 {
-    // Конфигурация линий: все как выходы, начальное значение 0 [web:18][web:21].
     gpiod::line_config line_cfg;
     gpiod::line_settings settings;
 
     settings.set_direction(gpiod::line::direction::OUTPUT);
     settings.set_output_value(gpiod::line::value::INACTIVE);
 
-    // одна конфигурация для всех линий
     line_cfg.add_line_settings(
-        { m_idxIn1, m_idxIn2, m_idxIn3, m_idxIn4, m_idxEnA, m_idxEnB },
+        { m_idxIn1, m_idxIn2, m_idxIn3, m_idxIn4 },
         settings
     );
 
@@ -73,7 +67,6 @@ bool MotorDriver::initRequest()
         return false;
     }
 
-    // Все линии уже выставлены в 0 по settings.
     return true;
 }
 
@@ -105,30 +98,31 @@ void MotorDriver::setRightMotor(MotorDirection dir, int dutyPercent)
 }
 
 void MotorDriver::updateBridgeSide(MotorDirection dir, int duty,
-                                   int offsetInA, int offsetInB, int offsetEn)
+                                   int offsetInA, int offsetInB)
 {
+    // Программный PWM по IN‑линиям: duty определяет, сколько времени INA активен/INB неактивен и наоборот.
+    int phaseA = 0;
+    int phaseB = 0;
+
     switch (dir) {
     case MotorDirection::Stop:
-        setLine(offsetInA, 0);
-        setLine(offsetInB, 0);
-        setLine(offsetEn, 0);
+        phaseA = 0;
+        phaseB = 0;
         break;
+
     case MotorDirection::Forward:
-        setLine(offsetInA, 1);
-        setLine(offsetInB, 0);
+        phaseA = (m_pwmCounter < duty) ? 1 : 0;
+        phaseB = 0;
         break;
+
     case MotorDirection::Backward:
-        setLine(offsetInA, 0);
-        setLine(offsetInB, 1);
+        phaseA = 0;
+        phaseB = (m_pwmCounter < duty) ? 1 : 0;
         break;
     }
 
-    if (dir == MotorDirection::Stop) {
-        setLine(offsetEn, 0);
-    } else {
-        int level = (m_pwmCounter < duty) ? 1 : 0;
-        setLine(offsetEn, level);
-    }
+    setLine(offsetInA, phaseA);
+    setLine(offsetInB, phaseB);
 }
 
 void MotorDriver::pwmTick()
@@ -137,6 +131,6 @@ void MotorDriver::pwmTick()
     if (m_pwmCounter >= PWM_PERIOD)
         m_pwmCounter = 0;
 
-    updateBridgeSide(m_leftDir,  m_leftDuty,  m_idxIn1, m_idxIn2, m_idxEnA);
-    updateBridgeSide(m_rightDir, m_rightDuty, m_idxIn3, m_idxIn4, m_idxEnB);
+    updateBridgeSide(m_leftDir,  m_leftDuty,  m_idxIn1, m_idxIn2);
+    updateBridgeSide(m_rightDir, m_rightDuty, m_idxIn3, m_idxIn4);
 }
