@@ -1,35 +1,30 @@
-#include "motordriver.h"
-#include <QCoreApplication>
-#include <QProcess>
-#include <QDebug>
-#include <algorithm>
+#ifndef MOTORDRIVER_H
+#define MOTORDRIVER_H
 
-static int dirToInt(MotorDirection d)
+#include <QObject>
+
+enum class MotorDirection {
+    Stop = 0,
+    Forward,
+    Backward
+};
+
+class MotorDriver : public QObject
 {
-    switch (d) {
-    case MotorDirection::Forward:  return 1;
-    case MotorDirection::Backward: return -1;
-    case MotorDirection::Stop:
-    default:                       return 0;
-    }
-}
+    Q_OBJECT
+public:
+    explicit MotorDriver(QObject *parent = nullptr);
 
-void MotorDriver::applyCommand()
-{
-    QString program = "python3";
+    void setLeftMotor(MotorDirection dir, int duty);
+    void setRightMotor(MotorDirection dir, int duty);
 
-    // бинарник лежит в корне проекта, src/motor_control.py — рядом относительно него
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QString script  = baseDir + "/src/motor_control.py";
+private:
+    void applyCommand();
 
-    QStringList args;
-    args << script
-         << QString::number(dirToInt(m_leftDir))
-         << QString::number(dirToInt(m_rightDir))
-         << QString::number(m_leftDuty)
-         << QString::number(m_rightDuty);
+    MotorDirection m_leftDir;
+    MotorDirection m_rightDir;
+    int m_leftDuty;
+    int m_rightDuty;
+};
 
-    QProcess *proc = new QProcess(this);
-    connect(proc, &QProcess::finished, proc, &QProcess::deleteLater);
-    proc->start(program, args);
-}
+#endif // MOTORDRIVER_H
