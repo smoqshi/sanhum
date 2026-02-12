@@ -1,7 +1,7 @@
 import { tank } from './robotState.js';
 
 // корпус, кабина спереди, платформа сзади
-// размеры согласованы с манипулятором (см. manupulator.js)
+// размеры согласованы с манипулятором (см. manipulator.js)
 const hullW = 160;
 const hullH = 100;
 
@@ -13,7 +13,7 @@ export function initChassis(canvas) {
   tank.x = tank.canvasWidth * 0.5;
   tank.y = tank.canvasHeight * 0.5;
 
-  // Повернём робота носом вверх (нос вдоль +X, heading = +90°)
+  // Повернём робота носом вверх (нос вдоль +X, heading = -90°)
   tank.heading = -Math.PI / 2;
 
   if (tank.trackPhaseLeft === undefined) tank.trackPhaseLeft = 0;
@@ -130,3 +130,4 @@ export function updateBase(dt) {
   tank.trackPhaseLeft = (tank.trackPhaseLeft ?? 0) + vL * k * dt;
   tank.trackPhaseRight = (tank.trackPhaseRight ?? 0) + vR * k * dt;
 }
+
