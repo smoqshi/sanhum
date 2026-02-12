@@ -12,7 +12,7 @@ static constexpr int GPIO_IN4 = 24;
 MotorDriver::MotorDriver(QObject *parent)
     : QObject(parent)
     , m_chip("gpiochip0")
-    , m_request()            // будет создан через request_builder
+    , m_request( gpiod::chip("gpiochip0").prepare_request().do_request() ) // временный, потом перезапишем
     , m_idxIn1(GPIO_IN1)
     , m_idxIn2(GPIO_IN2)
     , m_idxIn3(GPIO_IN3)
@@ -65,7 +65,8 @@ bool MotorDriver::initRequest()
     request_config rcfg;
     rcfg.set_consumer("sanhum_motors");
 
-    request_builder builder(m_chip);
+    // создаём builder через chip::prepare_request() [web:27]
+    request_builder builder = m_chip.prepare_request();
     builder.set_request_config(rcfg);
     builder.set_line_config(lcfg);
 
