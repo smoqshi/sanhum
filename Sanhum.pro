@@ -6,6 +6,8 @@ CONFIG -= app_bundle
 TARGET = Sanhum
 TEMPLATE = app
 
+LIBS += -lgpiodcxx
+
 SOURCES += \
     src/main.cpp \
     src/httpserver.cpp \
@@ -43,3 +45,4 @@ win32 {
 } else {
     QMAKE_POST_LINK += cp -r \"$$PWD/www\" \"$$OUT_PWD/www\"
 }
+
