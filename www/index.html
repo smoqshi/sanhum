@@ -588,14 +588,18 @@
     </div>
   </div>
 
-  <script src="js/robotState.js"></script>
-  <script src="js/network.js"></script>
-  <script src="js/chassis.js"></script>
-  <script src="js/manipulator.js"></script>
-  <script src="js/uiControls.js"></script>
-  <script src="js/cameras.js"></script>
+  <!-- ES‑модули проекта -->
+  <script type="module">
+    import './js/robotState.js';
+    import './js/network.js';
+    import './js/chassis.js';
+    import './js/manipulator.js';
+    import './js/uiControls.js';
+  </script>
 
-  <!-- Подключение WebRTC‑модуля -->
+  <!-- WebRTC‑камера -->
   <script src="js/webrtc.js"></script>
+  <!-- Камеры робота (HTTP‑стримы) -->
+  <script src="js/cameras.js"></script>
 </body>
 </html>
