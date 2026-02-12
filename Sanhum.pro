@@ -39,10 +39,13 @@ DISTFILES += \
     www/js/uiControls.js \
     www/js/network.js
 
+RESOURCES += resources.qrc
+
 # Автоматическое копирование папки www рядом с .exe
 win32 {
     QMAKE_POST_LINK += xcopy /E /I /Y \"$$PWD\\www\" \"$$OUT_PWD\\www\" & echo.
 } else {
     QMAKE_POST_LINK += cp -r \"$$PWD/www\" \"$$OUT_PWD/www\"
 }
+
 
