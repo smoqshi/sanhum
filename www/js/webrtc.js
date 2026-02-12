@@ -15,6 +15,7 @@
     try {
       // Базовая конфигурация видеопотока, как в типичных учебных примерах WebRTC:
       // 720p, 30 fps, без аудио.
+      // Такой шаблон используется в учебных материалах по WebRTC-захвату медиа.[web:24][web:21]
       localStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
