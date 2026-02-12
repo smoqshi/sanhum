@@ -1,45 +1,36 @@
-import { initNetwork, pollStatus, pollJointState } from './network.js';
+import { tank } from './robotState.js';
 import { initChassis, drawChassis, updateBase } from './chassis.js';
-import { initManipulator, drawManipulator } from './manipulator.js';
-import { initUI, updateControls, updateDashboardFromState } from './uiControls.js';
+import { drawManipulator } from './manipulator.js';
+import {
+  initUIControls,
+  updateControls,
+  updateDashboardFromState
+} from './uiControls.js';
 
-let canvas, ctx;
-let lastTime = 0;
+const canvas = document.getElementById('tankCanvas');
+const ctx = canvas.getContext('2d');
 
-function init() {
-    canvas = document.getElementById('tankCanvas');
-    if (!canvas) {
-        console.error('Canvas with id "tankCanvas" not found');
-        return;
-    }
-    ctx = canvas.getContext('2d');
+initChassis(canvas);
+initUIControls();
 
-    initChassis(canvas);
-    initManipulator();
-    initNetwork();
-    initUI();
+let lastTime = performance.now();
 
-    requestAnimationFrame(loop);
+function loop(time) {
+  const dt = (time - lastTime) / 1000.0;
+  lastTime = time;
 
-    // периодический опрос статуса и суставов
-    setInterval(pollStatus, 500);
-    setInterval(pollJointState, 200);
+  // Локальная симуляция (если включена)
+  updateBase(dt);
+  updateControls(dt);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawChassis(ctx);
+  drawManipulator(ctx, tank);
+
+  updateDashboardFromState();
+
+  requestAnimationFrame(loop);
 }
 
-function loop(timestamp) {
-    const dt = (timestamp - lastTime) / 1000;
-    lastTime = timestamp;
+requestAnimationFrame(loop);
 
-    updateControls(dt);        // обновление команд оператора
-    updateBase(dt);            // интеграция движения базы
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawChassis(ctx);          // отрисовка корпуса
-    drawManipulator(ctx);      // отрисовка манипулятора
-
-    updateDashboardFromState(); // обновление правого блока
-
-    requestAnimationFrame(loop);
-}
-
-window.addEventListener('load', init);
