@@ -12,7 +12,6 @@
 #include <QDebug>
 #include <algorithm>
 
-// Конструктор/деструктор
 RobotModel::RobotModel(QObject *parent)
     : QObject(parent)
     , m_motorDriver(this)
@@ -34,18 +33,20 @@ RobotModel::~RobotModel() = default;
 
 void RobotModel::emergencyStop()
 {
-    qDebug() << "BaseCommand v=" << v << "w=" << w;
     m_emergency = true;
     m_v = 0.0;
     m_w = 0.0;
 
     m_motorDriver.setLeftMotor(MotorDirection::Stop, 0);
     m_motorDriver.setRightMotor(MotorDirection::Stop, 0);
+
+    qDebug() << "Emergency stop activated";
 }
 
 // /api/base
 void RobotModel::setBaseCommand(double v, double w)
 {
+    qDebug() << "BaseCommand v=" << v << "w=" << w;
     m_v = v;
     m_w = w;
     m_emergency = false;
@@ -56,14 +57,15 @@ void RobotModel::setBaseCommand(double v, double w)
 void RobotModel::step(double dt)
 {
     Q_UNUSED(dt);
+
     if (m_emergency) {
         m_motorDriver.setLeftMotor(MotorDirection::Stop, 0);
         m_motorDriver.setRightMotor(MotorDirection::Stop, 0);
         return;
     }
 
-    const double maxWheelLinear = 0.5;
-    const double halfTrack      = 0.15;
+    const double maxWheelLinear = 0.5;   // м/с при duty 100%
+    const double halfTrack      = 0.15;  // плечо базы, м
 
     const double vL = m_v - m_w * halfTrack;
     const double vR = m_v + m_w * halfTrack;
@@ -100,7 +102,6 @@ void RobotModel::step(double dt)
     qDebug() << "Step: nL=" << nL << "nR=" << nR
              << "dutyL=" << left.second << "dutyR=" << right.second;
 }
-
 
 // ===== МАНИПУЛЯТОР =====
 
