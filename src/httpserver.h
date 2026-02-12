@@ -4,7 +4,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QProcess>
-#include "robotModel.h"
+#include "robotmodel.h"
 
 class HttpServer : public QObject
 {
@@ -29,4 +29,5 @@ private:
     QProcess m_procStereo;
 #endif
 };
+
 
