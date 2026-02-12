@@ -21,7 +21,7 @@ MotorDriver::MotorDriver(QObject *parent)
     , m_rightDuty(0)
     , m_brake(false)
 {
-    m_updateTimer.setInterval(10);              // 100 Гц
+    m_updateTimer.setInterval(10);
     connect(&m_updateTimer, &QTimer::timeout,
             this, &MotorDriver::onUpdateTimer);
     m_updateTimer.start();
@@ -83,4 +83,5 @@ void MotorDriver::sendCommand()
         qWarning() << "MotorDriver: failed to send UDP command";
     }
 }
+
 
