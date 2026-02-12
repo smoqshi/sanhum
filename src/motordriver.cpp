@@ -11,8 +11,8 @@ static constexpr int GPIO_IN4 = 24;
 
 MotorDriver::MotorDriver(QObject *parent)
     : QObject(parent)
-    , m_chip("gpiochip0")
-    , m_request( gpiod::chip("gpiochip0").prepare_request().do_request() ) // временный, потом перезапишем
+   , m_chip("/dev/gpiochip0")
+    , m_request( m_chip.prepare_request().do_request() )
     , m_idxIn1(GPIO_IN1)
     , m_idxIn2(GPIO_IN2)
     , m_idxIn3(GPIO_IN3)
@@ -147,3 +147,4 @@ void MotorDriver::pwmTick()
     updateBridgeSide(m_leftDir,  m_leftDuty,  m_idxIn1, m_idxIn2);
     updateBridgeSide(m_rightDir, m_rightDuty, m_idxIn3, m_idxIn4);
 }
+
