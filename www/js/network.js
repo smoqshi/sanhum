@@ -7,29 +7,7 @@ export function initNetwork() {
             pollStatus();
         });
     }
-
-    // Камеры: если поток MJPEG не грузится, показываем "no signal"
-    const stereoImg = document.getElementById('stereoVideo');
-    const stereoNoSig = document.getElementById('stereoNoSignal');
-    if (stereoImg && stereoNoSig) {
-        stereoImg.addEventListener('error', () => {
-            stereoNoSig.style.display = 'block';
-        });
-        stereoImg.addEventListener('load', () => {
-            stereoNoSig.style.display = 'none';
-        });
-    }
-
-    const csiImg = document.getElementById('csiVideo');
-    const csiNoSig = document.getElementById('csiNoSignal');
-    if (csiImg && csiNoSig) {
-        csiImg.addEventListener('error', () => {
-            csiNoSig.style.display = 'block';
-        });
-        csiImg.addEventListener('load', () => {
-            csiNoSig.style.display = 'none';
-        });
-    }
+    // Видео временно отключено, никаких обработчиков для <img> не вешаем
 }
 
 export async function pollStatus() {
@@ -53,15 +31,15 @@ export async function pollStatus() {
         const boardTemp = document.getElementById('statusBoardTemp');
         if (cpuTemp) {
             const v = d.cpu_temp_c;
-            cpuTemp.textContent = (v !== undefined && v !== null) ? `${v} °C` : '-- °C';
+            cpuTemp.textContent = (v !== undefined && v !== null) ? `${v.toFixed(1)} °C` : '-- °C';
         }
         if (cpuLoad) {
             const v = d.cpu_load_percent;
-            cpuLoad.textContent = (v !== undefined && v !== null) ? `${v} %` : '-- %';
+            cpuLoad.textContent = (v !== undefined && v !== null) ? `${v.toFixed(1)} %` : '-- %';
         }
         if (boardTemp) {
             const v = d.board_temp_c;
-            boardTemp.textContent = (v !== undefined && v !== null) ? `${v} °C` : '-- °C';
+            boardTemp.textContent = (v !== undefined && v !== null) ? `${v.toFixed(1)} °C` : '-- °C';
         }
 
         const battery = document.getElementById('statusBattery');
@@ -73,27 +51,27 @@ export async function pollStatus() {
 
         if (battery) {
             const v = d.battery_v;
-            battery.textContent = (v !== undefined && v !== null) ? `${v} V` : '-- V';
+            battery.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} V` : '-- V';
         }
         if (currentTotal) {
             const v = d.current_total_a;
-            currentTotal.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A';
+            currentTotal.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A';
         }
         if (current5V) {
             const v = d.current_5v_a;
-            current5V.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A';
+            current5V.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A';
         }
         if (current12V) {
             const v = d.current_12v_a;
-            current12V.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A';
+            current12V.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A';
         }
         if (currentMotors) {
             const v = d.current_motors_a;
-            currentMotors.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A';
+            currentMotors.textContent = (v !== undefined && v !== null) ? `${v.toFixed(2)} A` : '-- A';
         }
         if (currentGpio) {
             const v = d.current_gpio_ma;
-            currentGpio.textContent = (v !== undefined && v !== null) ? `${v} mA` : '-- mA';
+            currentGpio.textContent = (v !== undefined && v !== null) ? `${v.toFixed(1)} mA` : '-- mA`;
         }
     } catch (e) {
         console.error('pollStatus error', e);
@@ -131,12 +109,15 @@ export async function pollJointState() {
         if (!r.ok) return;
         const d = await r.json();
 
-        if (d.arm) {
-            tank.q2 = d.arm.q2 ?? tank.q2;
-            tank.q3 = d.arm.q3 ?? tank.q3;
-            tank.q4 = d.arm.q4 ?? tank.q4;
-            tank.gripper = d.arm.gripper ?? tank.gripper;
-            tank.turretAngle = d.arm.turret ?? tank.turretAngle;
+        // сервер отдаёт плоский объект: { turret_deg, arm_ext, gripper }
+        if (typeof d.turret_deg === 'number') {
+            tank.turretAngle = d.turret_deg;
+        }
+        if (typeof d.arm_ext === 'number') {
+            tank.armExtension = d.arm_ext;
+        }
+        if (typeof d.gripper === 'number') {
+            tank.gripper = d.gripper;
         }
     } catch (e) {
         console.error('pollJointState error', e);
