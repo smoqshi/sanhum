@@ -4,7 +4,9 @@
 #include <QObject>
 #include <QTimer>
 
-#include <gpiod.hpp>
+extern "C" {
+#include <gpiod.h>
+}
 
 enum class MotorDirection {
     Stop,
@@ -26,17 +28,16 @@ public:
     void pwmTick();
 
 private:
-    // libgpiod2 C++ API
-    gpiod::chip m_chip;
+    // gpiod 2.x C API
+    gpiod_chip *m_chip;
 
-    gpiod::line m_in1;
-    gpiod::line m_in2;
-    gpiod::line m_in3;
-    gpiod::line m_in4;
-    gpiod::line m_ena;
-    gpiod::line m_enb;
+    gpiod_line *m_in1;
+    gpiod_line *m_in2;
+    gpiod_line *m_in3;
+    gpiod_line *m_in4;
+    gpiod_line *m_ena;
+    gpiod_line *m_enb;
 
-    // внутреннее состояние PWM
     MotorDirection m_leftDir;
     MotorDirection m_rightDir;
     int m_leftDuty;   // 0..100
@@ -46,9 +47,9 @@ private:
     static constexpr int PWM_PERIOD = 100;
 
     bool initLines();
-    void setLine(gpiod::line &line, int value);
+    void setLine(gpiod_line *line, int value);
     void updateBridgeSide(MotorDirection dir, int duty,
-                          gpiod::line &inA, gpiod::line &inB, gpiod::line &en);
+                          gpiod_line *inA, gpiod_line *inB, gpiod_line *en);
 };
 
 #endif // MOTORDRIVER_H
