@@ -44,10 +44,10 @@ RESOURCES += resources.qrc
 win32 {
     QMAKE_POST_LINK += xcopy /E /I /Y \"$$PWD\\www\" \"$$OUT_PWD\\www\" & echo.
 } else {
-    !equals(PWD, OUT_PWD) {
-        QMAKE_POST_LINK += cp -r \"$$PWD/www\" \"$$OUT_PWD/www\"
-    }
+    # На Linux (включая Raspberry Pi) собираем в исходной директории,
+    # папка www уже лежит рядом с бинарём, лишнее копирование не нужно.
 }
+
 
 
 
