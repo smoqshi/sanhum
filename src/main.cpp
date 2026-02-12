@@ -1,10 +1,8 @@
-#include <QApplication>
 #include <QCoreApplication>
 #include <QFile>
 #include <QProcess>
 #include <QDebug>
 
-#include "mainwindow.h"
 #include "robotmodel.h"
 #include "httpserver.h"
 
@@ -33,16 +31,12 @@ static void ensureMotorDaemonRunning()
 
 int main(int argc, char *argv[])
 {
-    QApplication app(argc, argv);
+    QCoreApplication a(argc, argv);
 
-    // автозапуск демона управления моторами/манипулятором
     ensureMotorDaemonRunning();
 
     RobotModel model;
     HttpServer server(&model);
 
-    MainWindow w(&model);
-    w.show();
-
-    return app.exec();
+    return a.exec();
 }
