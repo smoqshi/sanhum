@@ -37,3 +37,10 @@ win32 {
     # На Linux / Raspberry Pi собираем в исходной директории,
     # папка www уже лежит рядом с бинарём, лишнее копирование не нужно.
 }
+
+# motor_control.py из src копируем в папку с бинарником после сборки
+target.path = $$OUT_PWD
+INSTALLS += target
+
+# post-link step: копировать motor_control.py рядом с бинарём
+QMAKE_POST_LINK += $$quote(cp $$PWD/src/motor_control.py $$OUT_PWD/motor_control.py;)
