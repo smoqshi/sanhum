@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QTimer>
+#include <QUdpSocket>
 
 enum class MotorDirection {
     Stop = 0,
@@ -19,18 +20,22 @@ public:
     void setLeftMotor(MotorDirection dir, int duty);
     void setRightMotor(MotorDirection dir, int duty);
 
+    void emergencyBrake();   // кнопка B
+
 private slots:
     void onUpdateTimer();
 
 private:
-    void applyCommand();
+    void sendCommand();
 
     MotorDirection m_leftDir;
     MotorDirection m_rightDir;
     int m_leftDuty;
     int m_rightDuty;
+    bool m_brake;
 
     QTimer m_updateTimer;
+    QUdpSocket m_socket;
 };
 
 #endif // MOTORDRIVER_H
