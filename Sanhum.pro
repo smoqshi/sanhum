@@ -41,16 +41,6 @@ DISTFILES += \
 
 RESOURCES += resources.qrc
 
-win32 {
-    QMAKE_POST_LINK += xcopy /E /I /Y \"$$PWD\\www\" \"$$OUT_PWD\\www\" & echo.
-} else {
-    # На Linux (включая Raspberry Pi) собираем в исходной директории,
-    # папка www уже лежит рядом с бинарём, лишнее копирование не нужно.
-}
-
-
-
-
 
 
 
