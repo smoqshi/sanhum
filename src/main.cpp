@@ -1,42 +1,26 @@
 #include <QCoreApplication>
-#include <QFile>
-#include <QProcess>
-#include <QDebug>
+#include <QTimer>
 
 #include "robotmodel.h"
 #include "httpserver.h"
 
-static void ensureMotorDaemonRunning()
-{
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QString script  = baseDir + "/src/motor_control.py";
-
-    if (!QFile::exists(script)) {
-        qWarning() << "motor_control.py not found at" << script;
-        return;
-    }
-
-    QString program = "python3";
-    QStringList args;
-    args << script;
-
-    qint64 pid = 0;
-    bool ok = QProcess::startDetached(program, args, baseDir, &pid);
-    if (!ok) {
-        qWarning() << "Failed to start motor_control.py";
-    } else {
-        qDebug() << "motor_control.py started, pid =" << pid;
-    }
-}
-
 int main(int argc, char *argv[])
 {
-    QCoreApplication a(argc, argv);
-
-    ensureMotorDaemonRunning();
+    QCoreApplication app(argc, argv);
 
     RobotModel model;
     HttpServer server(&model);
 
-    return a.exec();
+    if (!server.listen(8080)) {
+        qFatal("Failed to listen on port 8080");
+    }
+
+    QTimer timer;
+    QObject::connect(&timer, &QTimer::timeout, [&model]() {
+        constexpr double dt = 0.02;
+        model.step(dt);
+    });
+    timer.start(20);
+
+    return app.exec();
 }
