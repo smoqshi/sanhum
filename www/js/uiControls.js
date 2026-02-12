@@ -3,7 +3,6 @@ import { sendBaseCommand, sendArmCommand } from './network.js';
 
 let vLinearSlider, vAngularSlider, turretSlider, armSlider, gripperSlider;
 let lblVLinear, lblVAngular, lblTurret, lblArm, lblGripper;
-let chkSimulation;
 let gamepadStatusLabel;
 
 let gamepadIndex = null;
@@ -27,14 +26,6 @@ export function initUI() {
     lblArm      = document.getElementById('lblArm');
     lblGripper  = document.getElementById('lblGripper');
 
-    chkSimulation = document.getElementById('chkSimulation');
-    if (chkSimulation) {
-        chkSimulation.checked = tank.simulationMode;
-        chkSimulation.addEventListener('change', () => {
-            tank.simulationMode = chkSimulation.checked;
-        });
-    }
-
     gamepadStatusLabel = document.getElementById('gamepadStatus');
 
     if (vLinearSlider && vLinearValue) {
@@ -42,7 +33,7 @@ export function initUI() {
             const v = parseFloat(vLinearSlider.value) || 0;
             tank.vLinearCmd = v;
             vLinearValue.textContent = v.toFixed(2);
-            sendBaseIfNeeded();
+            sendBase();
         });
     }
     if (vAngularSlider && vAngularValue) {
@@ -50,7 +41,7 @@ export function initUI() {
             const v = parseFloat(vAngularSlider.value) || 0;
             tank.vAngularCmdDeg = v;
             vAngularValue.textContent = v.toFixed(0);
-            sendBaseIfNeeded();
+            sendBase();
         });
     }
     if (turretSlider && turretValue) {
@@ -58,7 +49,7 @@ export function initUI() {
             const v = parseFloat(turretSlider.value) || 0;
             tank.turretAngle = v;
             turretValue.textContent = v.toFixed(0);
-            sendArmIfNeeded();
+            sendArm();
         });
     }
     if (armSlider && armValue) {
@@ -66,7 +57,7 @@ export function initUI() {
             const v = parseFloat(armSlider.value) || 0;
             tank.armExtension = v / 100.0;
             armValue.textContent = v.toFixed(0);
-            sendArmIfNeeded();
+            sendArm();
         });
     }
     if (gripperSlider && gripperValue) {
@@ -74,7 +65,7 @@ export function initUI() {
             const v = parseFloat(gripperSlider.value) || 0;
             tank.gripper = v / 100.0;
             gripperValue.textContent = v.toFixed(0);
-            sendArmIfNeeded();
+            sendArm();
         });
     }
 
@@ -82,7 +73,6 @@ export function initUI() {
     initGamepadEvents();
 }
 
-// обновление по dt — здесь читаем геймпад
 export function updateControls(dt) {
     pollGamepad(dt);
 }
@@ -97,61 +87,61 @@ function wireControlButtons() {
             btn.addEventListener('click', () => {
                 tank.vLinearCmd = +0.5;
                 tank.vAngularCmdDeg = 0;
-                sendBaseIfNeeded();
+                sendBase();
             });
         } else if (label.includes('back')) {
             btn.addEventListener('click', () => {
                 tank.vLinearCmd = -0.5;
                 tank.vAngularCmdDeg = 0;
-                sendBaseIfNeeded();
+                sendBase();
             });
         } else if (label.includes('rotate left')) {
             btn.addEventListener('click', () => {
                 tank.vLinearCmd = 0;
                 tank.vAngularCmdDeg = +30;
-                sendBaseIfNeeded();
+                sendBase();
             });
         } else if (label.includes('rotate right')) {
             btn.addEventListener('click', () => {
                 tank.vLinearCmd = 0;
                 tank.vAngularCmdDeg = -30;
-                sendBaseIfNeeded();
+                sendBase();
             });
         } else if (label.includes('stop')) {
             btn.addEventListener('click', () => {
                 tank.vLinearCmd = 0;
                 tank.vAngularCmdDeg = 0;
-                sendBaseIfNeeded(true);
+                sendBase(true);
             });
         } else if (label.includes('turret left')) {
             btn.addEventListener('click', () => {
                 tank.turretAngle -= 5;
-                sendArmIfNeeded();
+                sendArm();
             });
         } else if (label.includes('turret right')) {
             btn.addEventListener('click', () => {
                 tank.turretAngle += 5;
-                sendArmIfNeeded();
+                sendArm();
             });
         } else if (label.includes('arm extend')) {
             btn.addEventListener('click', () => {
                 tank.armExtension = clamp01(tank.armExtension + 0.05);
-                sendArmIfNeeded();
+                sendArm();
             });
         } else if (label.includes('arm retract')) {
             btn.addEventListener('click', () => {
                 tank.armExtension = clamp01(tank.armExtension - 0.05);
-                sendArmIfNeeded();
+                sendArm();
             });
         } else if (label.includes('gripper close')) {
             btn.addEventListener('click', () => {
                 tank.gripper = clamp01(tank.gripper + 0.1);
-                sendArmIfNeeded();
+                sendArm();
             });
         } else if (label.includes('gripper open')) {
             btn.addEventListener('click', () => {
                 tank.gripper = clamp01(tank.gripper - 0.1);
-                sendArmIfNeeded();
+                sendArm();
             });
         }
     });
@@ -160,21 +150,19 @@ function wireControlButtons() {
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
             tank.resetPose();
-            sendBaseIfNeeded(true);
-            sendArmIfNeeded();
+            sendBase(true);
+            sendArm();
         });
     }
 }
 
-function sendBaseIfNeeded(emergency = false) {
-    if (tank.simulationMode) return;
+function sendBase(emergency = false) {
     const vLin = tank.vLinearCmd;
     const vAng = tank.vAngularCmdDeg * Math.PI / 180.0;
     sendBaseCommand(vLin, vAng, emergency);
 }
 
-function sendArmIfNeeded() {
-    if (tank.simulationMode) return;
+function sendArm() {
     const extend = tank.armExtension;
     const grip = tank.gripper;
     const turret = tank.turretAngle;
@@ -266,7 +254,7 @@ function pollGamepad(dt) {
     tank.vLinearCmd = -ay;
     tank.vAngularCmdDeg = ax * 40.0;
 
-    // манипулятор: плавные изменения
+    // манипулятор
     const turretSpeedDeg = 25.0;
     const armSpeed = 0.25;
     const gripSpeed = 0.4;
@@ -278,11 +266,9 @@ function pollGamepad(dt) {
     const gripDelta = (rt - lt) * gripSpeed * dt;
     tank.gripper = clamp01(tank.gripper + gripDelta);
 
-    // если работаем с реальным роботом — отправляем команды на борт
-    if (!tank.simulationMode) {
-        sendBaseIfNeeded();
-        sendArmIfNeeded();
-    }
+    // всегда отправляем команды роботу
+    sendBase();
+    sendArm();
 }
 
 function clamp01(x) {
@@ -290,3 +276,5 @@ function clamp01(x) {
     if (x > 1) return 1;
     return x;
 }
+
+
