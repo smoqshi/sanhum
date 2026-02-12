@@ -12,16 +12,18 @@
 
 RobotModel::RobotModel(QObject *parent)
     : QObject(parent)
-    , m_motorDriver(this)
-    , m_emergency(false)
     , m_v(0.0)
     , m_w(0.0)
+    , m_emergency(false)
     , m_ext(0.5)
     , m_grip(0.3)
     , m_turretDeg(0.0)
     , m_batteryV(12.0)
     , m_cpuTemp(40.0)
     , m_boardTemp(35.0)
+    , m_motorDriver(new MotorDriver(this))
+    , m_halfTrack(0.15)       // плечо базы, м (подбери под свой робот)
+    , m_maxWheelLinear(0.5)   // м/с при duty=100% (подбери экспериментально)
 {
 }
 
@@ -35,19 +37,22 @@ void RobotModel::emergencyStop()
     m_v = 0.0;
     m_w = 0.0;
 
-    m_motorDriver.setLeftMotor(MotorDirection::Stop, 0);
-    m_motorDriver.setRightMotor(MotorDirection::Stop, 0);
+    m_motorDriver->setLeftMotor(MotorDirection::Stop, 0);
+    m_motorDriver->setRightMotor(MotorDirection::Stop, 0);
 
     qDebug() << "Emergency stop activated";
 }
 
-// /api/base
+// ===== /api/base КОМАНДА ОТ ВЕБ-КЛИЕНТА =====
+
 void RobotModel::setBaseCommand(double v, double w)
 {
     qDebug() << "BaseCommand v=" << v << "w=" << w;
     m_v = v;
     m_w = w;
     m_emergency = false;
+
+    updateMotorsFromCommand();
 }
 
 // ===== ГЛАВНЫЙ ШАГ МОДЕЛИ БАЗЫ =====
@@ -57,22 +62,28 @@ void RobotModel::step(double dt)
     Q_UNUSED(dt);
 
     if (m_emergency) {
-        m_motorDriver.setLeftMotor(MotorDirection::Stop, 0);
-        m_motorDriver.setRightMotor(MotorDirection::Stop, 0);
+        m_motorDriver->setLeftMotor(MotorDirection::Stop, 0);
+        m_motorDriver->setRightMotor(MotorDirection::Stop, 0);
         return;
     }
 
-    const double maxWheelLinear = 0.5;  // м/с при duty 100% (подбери)
-    const double halfTrack      = 0.15; // плечо базы, м (подбери)
+    updateMotorsFromCommand();
+}
 
-    const double vL = m_v - m_w * halfTrack;
-    const double vR = m_v + m_w * halfTrack;
+// Пересчёт (v,w) -> (направление, ШИМ) для каждого колеса
+
+void RobotModel::updateMotorsFromCommand()
+{
+    // vL = v - w * L/2, vR = v + w * L/2 (классическая модель дифф-привода) [web:1]
+    const double vL = m_v - m_w * m_halfTrack;
+    const double vR = m_v + m_w * m_halfTrack;
 
     double nL = 0.0;
     double nR = 0.0;
-    if (maxWheelLinear > 1e-6) {
-        nL = vL / maxWheelLinear;
-        nR = vR / maxWheelLinear;
+
+    if (m_maxWheelLinear > 1e-6) {
+        nL = vL / m_maxWheelLinear;
+        nR = vR / m_maxWheelLinear;
     }
 
     nL = std::max(-1.0, std::min(1.0, nL));
@@ -94,10 +105,11 @@ void RobotModel::step(double dt)
     auto left  = toDirAndDuty(nL);
     auto right = toDirAndDuty(nR);
 
-    m_motorDriver.setLeftMotor(left.first, left.second);
-    m_motorDriver.setRightMotor(right.first, right.second);
+    m_motorDriver->setLeftMotor(left.first, left.second);
+    m_motorDriver->setRightMotor(right.first, right.second);
 
-    qDebug() << "Step: v=" << m_v << "w=" << m_w
+    qDebug() << "updateMotorsFromCommand:"
+             << "v=" << m_v << "w=" << m_w
              << "vL=" << vL << "vR=" << vR
              << "nL=" << nL << "nR=" << nR
              << "dutyL=" << left.second << "dutyR=" << right.second;
@@ -294,4 +306,6 @@ QJsonObject RobotModel::makeJointStateJson() const
     obj.insert(QStringLiteral("gripper"), m_grip);
     return obj;
 }
+
+
 
