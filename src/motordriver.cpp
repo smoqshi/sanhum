@@ -39,9 +39,8 @@ void MotorDriver::setRightMotor(MotorDirection dir, int duty)
 
 void MotorDriver::applyCommand()
 {
+    auto *proc = new QProcess(this);
     QString program = "python3";
-
-    // Бинарник Sanhum лежит в корне проекта, src/ — рядом
     QString baseDir = QCoreApplication::applicationDirPath();
     QString script  = baseDir + "/src/motor_control.py";
 
@@ -52,19 +51,12 @@ void MotorDriver::applyCommand()
          << QString::number(m_leftDuty)
          << QString::number(m_rightDuty);
 
-    QProcess *proc = new QProcess(this);
     connect(proc, &QProcess::finished,
-            this,
-            [proc](int code, QProcess::ExitStatus st) {
-                qDebug() << "motor_control.py finished, code=" << code
-                         << "status=" << st;
-                qDebug() << "stdout:" << proc->readAllStandardOutput();
-                qDebug() << "stderr:" << proc->readAllStandardError();
-                proc->deleteLater();
-            });
+            proc, &QProcess::deleteLater);
 
     proc->start(program, args);
-    if (!proc->waitForStarted(1000)) {
-        qWarning() << "Failed to start motor_control.py" << proc->errorString();
-    }
+    // максимум: короткая проверка на старт
+    // proc->waitForStarted(100);
 }
+
+
