@@ -36,42 +36,6 @@ static QByteArray httpResponse(const QByteArray &body,
     return resp;
 }
 
-// Прокси для HTTP-потока (используется для CSI через локальный MJPEG-сервер)
-static void proxyHttpStream(QTcpSocket *client,
-                            const QString &host,
-                            quint16 port,
-                            const QByteArray &path)
-{
-    QTcpSocket upstream;
-    upstream.connectToHost(host, port);
-    if (!upstream.waitForConnected(1000)) {
-        client->write(httpResponse("no upstream", "text/plain", 503, "Service Unavailable"));
-        client->disconnectFromHost();
-        return;
-    }
-
-    QByteArray req = "GET ";
-    req += path;
-    req += " HTTP/1.1\r\nHost: ";
-    req += host.toUtf8();
-    req += "\r\nConnection: close\r\n\r\n";
-    upstream.write(req);
-    upstream.flush();
-
-    while (upstream.state() == QAbstractSocket::ConnectedState) {
-        if (!upstream.waitForReadyRead(500))
-            continue;
-        const QByteArray chunk = upstream.readAll();
-        if (chunk.isEmpty())
-            break;
-        client->write(chunk);
-        client->flush();
-    }
-
-    upstream.disconnectFromHost();
-    client->disconnectFromHost();
-}
-
 // =================== HttpServer ===================
 
 HttpServer::HttpServer(RobotModel *model, QObject *parent)
@@ -83,27 +47,34 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
             this, &HttpServer::onNewConnection);
 
 #ifdef Q_OS_LINUX
-    // --- CSI камера: как в исходном проекте, libcamera-vid -> локальный HTTP (8081) ---
-
-    m_procCsi.setProgram("bash");
+    // --- CSI камера (OV5647, rpicam-vid -> stdout -> m_lastCsiFrame) ---
+    m_procCsi.setProgram("rpicam-vid");
     m_procCsi.setArguments({
-        "-lc",
-        "libcamera-vid "
-        "--camera 0 "
-        "--width 1280 --height 720 "
-        "--framerate 20 "
-        "--codec mjpeg "
-        "--quality 70 "
-        "--timeout 0 "
-        "--nopreview "
-        "-o - "
-        "| python3 -m mjpeg_http_streamer -l 127.0.0.1 -p 8081"
+        "--camera", "0",
+        "--timeout", "0",
+        "--codec", "mjpeg",
+        "--width", "1280",
+        "--height", "720",
+        "--framerate", "20",
+        "-o", "-"        // вывод в stdout
     });
-    m_procCsi.setProcessChannelMode(QProcess::MergedChannels);
-    m_procCsi.startDetached();
+    m_procCsi.setProcessChannelMode(QProcess::SeparateChannels);
+    connect(&m_procCsi, &QProcess::readyReadStandardOutput, this, [this]() {
+        // Дописываем новые байты
+        m_lastCsiFrame += m_procCsi.readAllStandardOutput();
+        // Ищем последний полный JPEG по маркерам FF D8 ... FF D9
+        int start = m_lastCsiFrame.lastIndexOf("\xFF\xD8");
+        int end   = m_lastCsiFrame.lastIndexOf("\xFF\xD9");
+        if (start >= 0 && end > start) {
+            QByteArray frame = m_lastCsiFrame.mid(start, end - start + 2);
+            m_lastCsiFrame = frame; // сохраняем только последний полный кадр
+        } else if (start > 0) {
+            m_lastCsiFrame = m_lastCsiFrame.mid(start);
+        }
+    });
+    m_procCsi.start();
 
-    // --- Stereo USB камера: ffmpeg -> stdout, читаем в Qt и отдаём MJPEG сами ---
-
+    // --- Stereo USB камера: ffmpeg -> stdout -> m_lastStereoFrame ---
     m_procStereo.setProgram("ffmpeg");
     m_procStereo.setArguments({
         "-f", "v4l2",
@@ -116,24 +87,17 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
         "pipe:1"
     });
     m_procStereo.setProcessChannelMode(QProcess::SeparateChannels);
-
     connect(&m_procStereo, &QProcess::readyReadStandardOutput, this, [this]() {
-        // Дописываем новые байты
         m_lastStereoFrame += m_procStereo.readAllStandardOutput();
-
-        // Ищем последний полный JPEG по маркерам FF D8 ... FF D9
         int start = m_lastStereoFrame.lastIndexOf("\xFF\xD8");
         int end   = m_lastStereoFrame.lastIndexOf("\xFF\xD9");
         if (start >= 0 && end > start) {
             QByteArray frame = m_lastStereoFrame.mid(start, end - start + 2);
-            // сохраняем только последний полный кадр
             m_lastStereoFrame = frame;
         } else if (start > 0) {
-            // Отбрасываем мусор до начала потенциального JPEG
             m_lastStereoFrame = m_lastStereoFrame.mid(start);
         }
     });
-
     m_procStereo.start();
 #endif
 }
@@ -201,18 +165,42 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
         wwwRoot = QCoreApplication::applicationDirPath() + QStringLiteral("/../www");
     }
 
-    // ---------- MJPEG-видео: CSI через прокси ----------
+    // ---------- MJPEG-видео: CSI ----------
     if (method == "GET" && path == "/video/csi") {
 #ifdef Q_OS_LINUX
-        proxyHttpStream(socket, QStringLiteral("127.0.0.1"), 8081, "/stream");
+        socket->write(
+            "HTTP/1.1 200 OK\r\n"
+            "Connection: close\r\n"
+            "Cache-Control: no-cache\r\n"
+            "Pragma: no-cache\r\n"
+            "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n"
+        );
+
+        while (socket->state() == QAbstractSocket::ConnectedState) {
+            if (!m_lastCsiFrame.isEmpty()) {
+                QByteArray header;
+                header += "--frame\r\n";
+                header += "Content-Type: image/jpeg\r\n";
+                header += "Content-Length: ";
+                header += QByteArray::number(m_lastCsiFrame.size());
+                header += "\r\n\r\n";
+                socket->write(header);
+                socket->write(m_lastCsiFrame);
+                socket->write("\r\n");
+                socket->flush();
+            }
+            QThread::msleep(50);
+            if (!socket->waitForBytesWritten(10))
+                break;
+        }
 #else
         socket->write(httpResponse("no signal", "text/plain", 503, "Service Unavailable"));
-        socket->disconnectFromHost();
 #endif
+        socket->disconnectFromHost();
         return;
     }
 
-    // ---------- MJPEG-видео: Stereo USB /dev/video8, отдаём сами ----------
+    // ---------- MJPEG-видео: Stereo ----------
     if (method == "GET" && path == "/video/stereo") {
 #ifdef Q_OS_LINUX
         socket->write(
@@ -236,7 +224,7 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
                 socket->write("\r\n");
                 socket->flush();
             }
-            QThread::msleep(50); // ~20 кадров в секунду
+            QThread::msleep(50);
             if (!socket->waitForBytesWritten(10))
                 break;
         }
