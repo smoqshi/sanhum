@@ -58,5 +58,3 @@ private:
 };
 
 #endif // ROBOTMODEL_H
-
-
