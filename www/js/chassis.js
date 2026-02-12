@@ -1,9 +1,8 @@
 import { tank } from './robotState.js';
 
-// корпус, кабина спереди, платформа сзади
-// размеры согласованы с manipulator.js
-const hullW = 160;
-const hullH = 100;
+// Уменьшенная модель: корпус компактнее, под окно симуляции 200px
+const hullW = 120;
+const hullH = 70;
 
 export function initChassis(canvas) {
   tank.canvasWidth = canvas.width;
@@ -12,7 +11,6 @@ export function initChassis(canvas) {
   tank.x = tank.canvasWidth * 0.5;
   tank.y = tank.canvasHeight * 0.5;
 
-  // Нос вверх
   tank.heading = -Math.PI / 2;
 
   if (tank.trackPhaseLeft === undefined) tank.trackPhaseLeft = 0;
@@ -27,7 +25,6 @@ export function drawChassis(ctx) {
   ctx.translate(cx, cy);
   ctx.rotate(tank.heading);
 
-  // корпус
   ctx.fillStyle = "#111827";
   ctx.strokeStyle = "#4b5563";
   ctx.lineWidth = 2;
@@ -41,9 +38,8 @@ export function drawChassis(ctx) {
   ctx.fill();
   ctx.stroke();
 
-  // кабина
-  const cabW = 28;
-  const cabH = 44;
+  const cabW = 22;
+  const cabH = 34;
 
   ctx.fillStyle = "#1f2937";
   ctx.beginPath();
@@ -63,15 +59,13 @@ export function drawChassis(ctx) {
     cabH - 8
   );
 
-  // платформа
   const bedW = hullW * 0.55;
   const bedX = -hullW / 2;
   ctx.fillStyle = "#0b1120";
   ctx.fillRect(bedX, -hullH / 2 + 4, bedW, hullH - 8);
 
-  // гусеницы
   const trackLen = hullW;
-  const seg = 8;
+  const seg = 6;
   const phaseL = tank.trackPhaseLeft ?? 0;
   const phaseR = tank.trackPhaseRight ?? 0;
 
@@ -82,8 +76,8 @@ export function drawChassis(ctx) {
     ctx.beginPath();
     for (let x = -trackLen / 2; x < trackLen / 2; x += seg) {
       const xx = x + (phase % seg);
-      ctx.moveTo(xx, y - 3);
-      ctx.lineTo(xx, y + 3);
+      ctx.moveTo(xx, y - 2);
+      ctx.lineTo(xx, y + 2);
     }
     ctx.stroke();
   }
@@ -92,13 +86,12 @@ export function drawChassis(ctx) {
   drawTrack(-trackOffsetY, phaseL);
   drawTrack(trackOffsetY, phaseR);
 
-  // стрелка носа
   ctx.fillStyle = "#f97316";
   ctx.beginPath();
   const noseX = hullW / 2;
-  ctx.moveTo(noseX + 6, 0);
-  ctx.lineTo(noseX - 6, -8);
-  ctx.lineTo(noseX - 6, 8);
+  ctx.moveTo(noseX + 5, 0);
+  ctx.lineTo(noseX - 5, -7);
+  ctx.lineTo(noseX - 5, 7);
   ctx.closePath();
   ctx.fill();
 
@@ -114,11 +107,12 @@ export function updateBase(dt) {
 
   tank.heading += wCmd * dt;
 
-  const B = 0.25;
+  // плечо базы меньше, чтобы анимация выглядела адекватно уменьшенному корпусу
+  const B = 0.18;
   const vL = vCmd - wCmd * B;
   const vR = vCmd + wCmd * B;
 
-  const k = 80;
+  const k = 60;
   tank.trackPhaseLeft = (tank.trackPhaseLeft ?? 0) + vL * k * dt;
   tank.trackPhaseRight = (tank.trackPhaseRight ?? 0) + vR * k * dt;
 }
