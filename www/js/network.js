@@ -52,15 +52,15 @@ export async function pollStatus() {
         const boardTemp = document.getElementById('statusBoardTemp');
         if (cpuTemp) {
             const v = d.cpu_temp_c;
-            cpuTemp.textContent = (v !== undefined && v !== null) ? `${v} °C` : '-- °C`;
+            cpuTemp.textContent = (v !== undefined && v !== null) ? `${v} °C` : '-- °C';
         }
         if (cpuLoad) {
             const v = d.cpu_load_percent;
-            cpuLoad.textContent = (v !== undefined && v !== null) ? `${v} %` : '-- %`;
+            cpuLoad.textContent = (v !== undefined && v !== null) ? `${v} %` : '-- %';
         }
         if (boardTemp) {
             const v = d.board_temp_c;
-            boardTemp.textContent = (v !== undefined && v !== null) ? `${v} °C` : '-- °C`;
+            boardTemp.textContent = (v !== undefined && v !== null) ? `${v} °C` : '-- °C';
         }
 
         const battery = document.getElementById('statusBattery');
@@ -72,27 +72,27 @@ export async function pollStatus() {
 
         if (battery) {
             const v = d.battery_v;
-            battery.textContent = (v !== undefined && v !== null) ? `${v} V` : '-- V`;
+            battery.textContent = (v !== undefined && v !== null) ? `${v} V` : '-- V';
         }
         if (currentTotal) {
             const v = d.current_total_a;
-            currentTotal.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A`;
+            currentTotal.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A';
         }
         if (current5V) {
             const v = d.current_5v_a;
-            current5V.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A`;
+            current5V.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A';
         }
         if (current12V) {
             const v = d.current_12v_a;
-            current12V.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A`;
+            current12V.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A';
         }
         if (currentMotors) {
             const v = d.current_motors_a;
-            currentMotors.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A`;
+            currentMotors.textContent = (v !== undefined && v !== null) ? `${v} A` : '-- A';
         }
         if (currentGpio) {
             const v = d.current_gpio_ma;
-            currentGpio.textContent = (v !== undefined && v !== null) ? `${v} mA` : '-- mA`;
+            currentGpio.textContent = (v !== undefined && v !== null) ? `${v} mA` : '-- mA';
         }
     } catch (e) {
         console.error('pollStatus error', e);
@@ -141,4 +141,5 @@ export async function pollJointState() {
         console.error('pollJointState error', e);
     }
 }
+
 
