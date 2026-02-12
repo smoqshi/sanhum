@@ -21,7 +21,7 @@ MotorDriver::MotorDriver(QObject *parent)
     , m_rightDuty(0)
     , m_brake(false)
 {
-    m_updateTimer.setInterval(50);              // 20 Гц обновления
+    m_updateTimer.setInterval(50);              // 20 Гц
     connect(&m_updateTimer, &QTimer::timeout,
             this, &MotorDriver::onUpdateTimer);
     m_updateTimer.start();
@@ -31,9 +31,7 @@ void MotorDriver::setLeftMotor(MotorDirection dir, int duty)
 {
     m_leftDir  = dir;
     m_leftDuty = duty;
-    // любое обычное управление снимает экстренный тормоз
-    // (если хочешь, можно этого не делать)
-    // m_brake = false;
+    // m_brake = false; // если хочешь, чтобы любое движение снимало тормоз
 }
 
 void MotorDriver::setRightMotor(MotorDirection dir, int duty)
@@ -78,7 +76,7 @@ void MotorDriver::sendCommand()
     qint64 sent = m_socket.writeDatagram(
         datagram,
         QHostAddress::LocalHost,
-        5005         // тот же порт, что в motor_control.py
+        5005         // UDP_PORT в motor_control.py
     );
 
     if (sent != datagram.size()) {
