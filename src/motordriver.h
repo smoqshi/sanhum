@@ -4,8 +4,7 @@
 #include <QObject>
 #include <QTimer>
 
-struct gpiod_chip;
-struct gpiod_line;
+#include <gpiod.hpp>
 
 enum class MotorDirection {
     Stop,
@@ -23,19 +22,19 @@ public:
     void setLeftMotor(MotorDirection dir, int dutyPercent);
     void setRightMotor(MotorDirection dir, int dutyPercent);
 
-    // вызывать периодически (у тебя уже висит QTimer с 1 мс)
+    // вызывать периодически (как и раньше)
     void pwmTick();
 
 private:
-    // libgpiod
-    gpiod_chip *m_chip;
+    // libgpiod2 C++ API
+    gpiod::chip m_chip;
 
-    gpiod_line *m_in1;
-    gpiod_line *m_in2;
-    gpiod_line *m_in3;
-    gpiod_line *m_in4;
-    gpiod_line *m_ena;
-    gpiod_line *m_enb;
+    gpiod::line m_in1;
+    gpiod::line m_in2;
+    gpiod::line m_in3;
+    gpiod::line m_in4;
+    gpiod::line m_ena;
+    gpiod::line m_enb;
 
     // внутреннее состояние PWM
     MotorDirection m_leftDir;
@@ -43,13 +42,13 @@ private:
     int m_leftDuty;   // 0..100
     int m_rightDuty;  // 0..100
 
-    int m_pwmCounter;    // 0..PWM_PERIOD-1
-    static constexpr int PWM_PERIOD = 100; // 100 шагов = 1 кГц при тике 10 мкс, но мы тикаем 1мс => 10 Гц, нам ок
+    int m_pwmCounter;
+    static constexpr int PWM_PERIOD = 100;
 
-    // внутренняя инициализация
     bool initLines();
-    void setLine(gpiod_line *line, int value);
-    void updateBridgeSide(MotorDirection dir, int duty, gpiod_line *inA, gpiod_line *inB, gpiod_line *en);
+    void setLine(gpiod::line &line, int value);
+    void updateBridgeSide(MotorDirection dir, int duty,
+                          gpiod::line &inA, gpiod::line &inB, gpiod::line &en);
 };
 
 #endif // MOTORDRIVER_H
