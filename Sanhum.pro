@@ -41,11 +41,14 @@ DISTFILES += \
 
 RESOURCES += resources.qrc
 
-# Автоматическое копирование папки www рядом с .exe
 win32 {
     QMAKE_POST_LINK += xcopy /E /I /Y \"$$PWD\\www\" \"$$OUT_PWD\\www\" & echo.
 } else {
-    QMAKE_POST_LINK += cp -r \"$$PWD/www\" \"$$OUT_PWD/www\"
+    !equals(PWD, OUT_PWD) {
+        QMAKE_POST_LINK += cp -r \"$$PWD/www\" \"$$OUT_PWD/www\"
+    }
 }
+
+
 
 
