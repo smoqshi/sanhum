@@ -3,21 +3,21 @@ import socket
 import struct
 import time
 import threading
-from typing import Tuple
+from typing import Optional
 
 import gpiod
 from gpiod.line import Direction, Value
 
 try:
-    import serial  # для ESP32, если нет – манипулятор просто не будет активен
+    import serial  # для ESP32; если не установлен, манипулятор просто не работает
 except ImportError:
     serial = None
 
 # -------------------------------
-# Настройки
+# Настройки GPIO и таймингов
 # -------------------------------
 
-# GPIO для колес (D0..D3 по таблице драйвера)
+# D0..D3 согласно таблице драйвера
 GPIO_D0 = 17  # MOTOR 1 D0
 GPIO_D1 = 27  # MOTOR 1 D1
 GPIO_D2 = 23  # MOTOR 2 D2
@@ -25,32 +25,34 @@ GPIO_D3 = 24  # MOTOR 2 D3
 
 CHIP_PATH = "/dev/gpiochip0"
 
-PWM_FREQ_HZ = 100.0           # частота ШИМ для колес
+PWM_FREQ_HZ = 100.0          # частота ШИМ
 PERIOD = 1.0 / PWM_FREQ_HZ
-UPDATE_HZ = 100.0             # частота опроса команд / обновления моторов
+
+UPDATE_HZ = 100.0            # частота обновления команд
 UPDATE_DT = 1.0 / UPDATE_HZ
 
-# UDP сервер для команд от Qt
+# -------------------------------
+# UDP протокол
+# -------------------------------
+
 UDP_HOST = "127.0.0.1"
 UDP_PORT = 5005
 
-# Протокол колес:
-# 5 целых (int8): left_dir, right_dir, left_duty, right_duty, brake
-#   dir: -1,0,1
+# Пакет моторов:
+# 1 байт: тип = 1
+# 5 байт int8: left_dir, right_dir, left_duty, right_duty, brake
+#   dir:  -1, 0, 1
 #   duty: 0..100
 #   brake: 0/1 (1 = принудительный тормоз)
 MOTOR_PKT_FMT = "bbbbb"  # 5 * int8
 
-# Протокол манипулятора:
-# пока сделаем очень просто:
-#   1 байт: командный код
-#   N байт: параметры (зависит от команды)
-# Код 1: установить положение звена (joint), формат:
-#   1 (cmd) | joint_id (uint8) | value (int16, little endian)
-# Это можно будет адаптировать под прошивку ESP32.
+# Пакет манипулятора:
+# 1 байт: тип = 2
+# N байт: payload, прямо пересылается на ESP32 (ниже простейший пример)
+
 
 # -------------------------------
-# Глобальное состояние команд
+# Состояние команд моторов
 # -------------------------------
 
 class MotorCommand:
@@ -67,24 +69,22 @@ class MotorCommand:
 motor_cmd = MotorCommand()
 motor_lock = threading.Lock()
 
-# Для манипулятора можно хранить последний пакет целиком или уже распарсенные команды.
-# Для простоты будем просто сразу пересылать команды на ESP32 по мере прихода.
 
 # -------------------------------
-# GPIO для колес
+# Логика драйвера D0/D1/D2/D3
 # -------------------------------
 
 def drive_one_motor(dir_, duty, pin0, pin1, values):
     """
-    Реализация таблицы:
-      Forward: (Speed regulation) -> PWM на D0/D2, второй вход 0
-      Reverse: (Speed regulation) -> PWM на D1/D3, второй вход 0
-      Stop: 0/0
-      Brake: 1/1
+    Таблица (для одного мотора):
+      Forward (speed):  PWM на D0/D2, другой вход 0
+      Reverse (speed):  PWM на D1/D3, другой вход 0
+      Stop:             0/0
+      Brake:            1/1 (обрабатывается выше по флагу brake)
 
-    duty >= 0: скорость, 0..100
-    brake = обрабатывается выше, здесь предполагаем, что если brake активен,
-    вызывающий код сам выставил duty<0 и мы вернём (0,0).
+    dir_:  -1, 0, 1
+    duty:  0..100
+    values: словарь pin -> Value.* на начало периода
     """
     duty = max(0, min(100, duty))
 
@@ -110,6 +110,12 @@ def drive_one_motor(dir_, duty, pin0, pin1, values):
 
 
 def motor_control_loop():
+    """
+    Цикл управления моторами:
+    - читает последнее состояние motor_cmd;
+    - применяет тормоз, если brake=1;
+    - иначе реализует таблицу D0/D1/D2/D3 с PWM.
+    """
     config = {
         GPIO_D0: gpiod.LineSettings(direction=Direction.OUTPUT,
                                     output_value=Value.INACTIVE),
@@ -125,8 +131,9 @@ def motor_control_loop():
         last_time = time.time()
         while True:
             now = time.time()
-            if now - last_time < UPDATE_DT:
-                time.sleep(UPDATE_DT - (now - last_time))
+            dt = now - last_time
+            if dt < UPDATE_DT:
+                time.sleep(UPDATE_DT - dt)
             last_time = time.time()
 
             with motor_lock:
@@ -138,22 +145,23 @@ def motor_control_loop():
 
             values = {}
 
-            # Экстренный тормоз: оба входа мотора = 1
+            # Экстренный тормоз: оба входа каждого мотора = 1
             if brake:
                 values[GPIO_D0] = Value.ACTIVE
                 values[GPIO_D1] = Value.ACTIVE
                 values[GPIO_D2] = Value.ACTIVE
                 values[GPIO_D3] = Value.ACTIVE
                 req.set_values(values)
-                # держим тормоз на всём периоде
                 time.sleep(PERIOD)
                 continue
 
             # Обычное управление
-            left_on, left_pwm_pin = drive_one_motor(left_dir, left_duty,
-                                                    GPIO_D0, GPIO_D1, values)
-            right_on, right_pwm_pin = drive_one_motor(right_dir, right_duty,
-                                                      GPIO_D2, GPIO_D3, values)
+            left_on, left_pwm_pin = drive_one_motor(
+                left_dir, left_duty, GPIO_D0, GPIO_D1, values
+            )
+            right_on, right_pwm_pin = drive_one_motor(
+                right_dir, right_duty, GPIO_D2, GPIO_D3, values
+            )
 
             req.set_values(values)
 
@@ -164,19 +172,20 @@ def motor_control_loop():
                 continue
 
             if max_on >= PERIOD:
-                # фактически 100% заполнение
+                # практически 100% заполнение
                 time.sleep(PERIOD)
                 continue
 
             # фаза ON
             time.sleep(max_on)
 
-            # фаза OFF только для тех линий, где был PWM
+            # фаза OFF только для линий с PWM
             off_values = {}
             if left_pwm_pin is not None:
                 off_values[left_pwm_pin] = Value.INACTIVE
             if right_pwm_pin is not None:
                 off_values[right_pwm_pin] = Value.INACTIVE
+
             if off_values:
                 req.set_values(off_values)
 
@@ -184,10 +193,10 @@ def motor_control_loop():
 
 
 # -------------------------------
-# Работа с ESP32 для манипулятора
+# ESP32 / манипулятор (заготовка)
 # -------------------------------
 
-def open_esp32_serial(port="/dev/ttyUSB0", baudrate=115200):
+def open_esp32_serial(port="/dev/ttyUSB0", baudrate=115200) -> Optional["serial.Serial"]:
     if serial is None:
         return None
     try:
@@ -196,20 +205,20 @@ def open_esp32_serial(port="/dev/ttyUSB0", baudrate=115200):
         return None
 
 
-def handle_manipulator_packet(data: bytes, ser):
+def handle_manipulator_packet(data: bytes, ser: Optional["serial.Serial"]) -> None:
     """
-    Очень простой протокол:
+    Очень простой протокол для примера:
       cmd = data[0]
       если cmd == 1:
         joint_id = data[1]
-        value = int16 little-endian (data[2:4])
-        отправляем строку вида: "J {joint_id} {value}\n"
-    Всё это можно адаптировать под прошивку ESP32.
+        value = int16 LE (data[2:4])
+        отправляем на ESP32 строку: "J {joint_id} {value}\\n"
     """
     if ser is None:
         return
     if len(data) < 1:
         return
+
     cmd = data[0]
 
     if cmd == 1 and len(data) >= 4:
@@ -220,7 +229,7 @@ def handle_manipulator_packet(data: bytes, ser):
             ser.write(line.encode("ascii"))
         except Exception:
             pass
-    # здесь можно добавить другие команды (gripper, режимы и т.п.)
+    # сюда можно добавить другие команды для манипулятора
 
 
 # -------------------------------
@@ -238,16 +247,18 @@ def udp_server_loop():
         if not data:
             continue
 
-        # Первый байт: тип пакета
         pkt_type = data[0]
+
+        # Для отладки можно раскомментировать:
+        # print("PKT:", list(data))
 
         # Тип 1: команда колес
         if pkt_type == 1:
-            # ожидаем 1 + 5 байт payload (по MOTOR_PKT_FMT)
-            if len(data) < 1 + struct.calcsize(MOTOR_PKT_FMT):
+            need = 1 + struct.calcsize(MOTOR_PKT_FMT)
+            if len(data) < need:
                 continue
             _, left_dir, right_dir, left_duty, right_duty, brake = struct.unpack(
-                "B" + MOTOR_PKT_FMT, data[:1 + struct.calcsize(MOTOR_PKT_FMT)]
+                "B" + MOTOR_PKT_FMT, data[:need]
             )
             with motor_lock:
                 motor_cmd.left_dir = int(left_dir)
@@ -256,7 +267,7 @@ def udp_server_loop():
                 motor_cmd.right_duty = int(right_duty)
                 motor_cmd.brake = int(brake)
 
-        # Тип 2: команда манипулятора (прозрачно пересылаем на ESP32)
+        # Тип 2: команда манипулятора
         elif pkt_type == 2:
             handle_manipulator_packet(data[1:], ser)
 
@@ -268,10 +279,8 @@ def udp_server_loop():
 def main():
     motor_thread = threading.Thread(target=motor_control_loop, daemon=True)
     motor_thread.start()
-
     udp_server_loop()
 
 
 if __name__ == "__main__":
     main()
-
