@@ -36,7 +36,11 @@ private:
     QProcess m_procStereo;
 #endif
 
-    // буферы для последних кадров
+    // буферы для парсинга потоков
+    QByteArray m_stereoBuffer;
+    QByteArray m_csiBuffer;
+
+    // последние полные кадры
     QByteArray m_lastStereoFrame;
     QByteArray m_lastCsiFrame;
 };
