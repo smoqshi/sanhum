@@ -22,10 +22,9 @@ public:
     void pwmTick();
 
 private:
-    gpiod::chip m_chip;
+    gpiod::chip         m_chip;
     gpiod::line_request m_request;
 
-    // offsets BCM для четырёх линий
     int m_idxIn1;
     int m_idxIn2;
     int m_idxIn3;
@@ -33,8 +32,8 @@ private:
 
     MotorDirection m_leftDir;
     MotorDirection m_rightDir;
-    int m_leftDuty;   // 0..100
-    int m_rightDuty;  // 0..100
+    int m_leftDuty;
+    int m_rightDuty;
     int m_pwmCounter;
     static constexpr int PWM_PERIOD = 100;
 
