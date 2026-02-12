@@ -76,6 +76,8 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
             int frameLen = end + 2;
             m_lastCsiFrame = m_csiBuffer.left(frameLen);
             m_csiBuffer.remove(0, frameLen);
+
+            qInfo() << "[CSI] frame bytes:" << m_lastCsiFrame.size();
         }
     });
     m_procCsi.start();
@@ -113,6 +115,8 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
             int frameLen = end + 2;
             m_lastStereoLeftFrame = m_stereoLeftBuffer.left(frameLen);
             m_stereoLeftBuffer.remove(0, frameLen);
+
+            qInfo() << "[Stereo L] frame bytes:" << m_lastStereoLeftFrame.size();
         }
     });
     m_procStereoLeft.start();
@@ -150,9 +154,15 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
             int frameLen = end + 2;
             m_lastStereoRightFrame = m_stereoRightBuffer.left(frameLen);
             m_stereoRightBuffer.remove(0, frameLen);
+
+            qInfo() << "[Stereo R] frame bytes:" << m_lastStereoRightFrame.size();
         }
     });
     m_procStereoRight.start();
+
+    qInfo() << "CSI started, pid=" << m_procCsi.processId();
+    qInfo() << "Stereo L started, pid=" << m_procStereoLeft.processId();
+    qInfo() << "Stereo R started, pid=" << m_procStereoRight.processId();
 #endif
 }
 
