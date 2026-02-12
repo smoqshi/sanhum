@@ -3,9 +3,8 @@
 
 #include <QObject>
 #include <QJsonObject>
-#include <QtGlobal>
 
-#include "motordriver.h"
+class MotorDriver;
 
 class RobotModel : public QObject
 {
@@ -49,7 +48,7 @@ private:
     double m_boardTemp;
 
     // драйвер моторов
-    MotorDriver m_motorDriver;
+    MotorDriver *m_motorDriver;
 
     // параметры базы
     double m_halfTrack;      // половина колеи, м
@@ -59,4 +58,5 @@ private:
 };
 
 #endif // ROBOTMODEL_H
+
 
