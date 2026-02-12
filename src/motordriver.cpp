@@ -12,7 +12,7 @@ static constexpr int GPIO_IN4 = 24;
 MotorDriver::MotorDriver(QObject *parent)
     : QObject(parent)
     , m_chip("gpiochip0")
-    , m_request( gpiod::request_builder{}.do_request() ) // временный пустой, сразу перезатрём
+    , m_request()            // будет создан через request_builder
     , m_idxIn1(GPIO_IN1)
     , m_idxIn2(GPIO_IN2)
     , m_idxIn3(GPIO_IN3)
@@ -47,25 +47,25 @@ bool MotorDriver::initRequest()
 {
     using namespace gpiod;
 
-    // Конфигурация линий [web:18][web:27]
     line_settings settings;
     settings.set_direction(line::direction::OUTPUT);
     settings.set_output_value(line::value::INACTIVE);
 
     line_config lcfg;
     lcfg.add_line_settings(
-        line::offsets{ static_cast<unsigned int>(m_idxIn1),
-                       static_cast<unsigned int>(m_idxIn2),
-                       static_cast<unsigned int>(m_idxIn3),
-                       static_cast<unsigned int>(m_idxIn4) },
+        line::offsets{
+            static_cast<line::offset>(m_idxIn1),
+            static_cast<line::offset>(m_idxIn2),
+            static_cast<line::offset>(m_idxIn3),
+            static_cast<line::offset>(m_idxIn4)
+        },
         settings
     );
 
     request_config rcfg;
     rcfg.set_consumer("sanhum_motors");
 
-    request_builder builder;
-    builder.set_chip(m_chip);
+    request_builder builder(m_chip);
     builder.set_request_config(rcfg);
     builder.set_line_config(lcfg);
 
@@ -86,8 +86,9 @@ void MotorDriver::setLine(int offset, int value)
 
     try {
         m_request.set_value(
-            static_cast<unsigned int>(offset),
-            value ? gpiod::line::value::ACTIVE : gpiod::line::value::INACTIVE
+            static_cast<gpiod::line::offset>(offset),
+            value ? gpiod::line::value::ACTIVE
+                  : gpiod::line::value::INACTIVE
         );
     } catch (const std::exception &e) {
         qWarning() << "MotorDriver: set_value failed on offset"
