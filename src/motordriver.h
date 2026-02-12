@@ -19,24 +19,18 @@ public:
 
     void setLeftMotor(MotorDirection dir, int dutyPercent);
     void setRightMotor(MotorDirection dir, int dutyPercent);
-
-    // вызывать периодически (как и раньше)
     void pwmTick();
 
 private:
-    // libgpiod C++ API 2.x
     gpiod::chip m_chip;
     gpiod::line_request m_request;
 
-    // номера линий в этом запросе (BCM)
+    // offsets BCM для четырёх линий
     int m_idxIn1;
     int m_idxIn2;
     int m_idxIn3;
     int m_idxIn4;
-    int m_idxEnA;
-    int m_idxEnB;
 
-    // состояние
     MotorDirection m_leftDir;
     MotorDirection m_rightDir;
     int m_leftDuty;   // 0..100
@@ -47,7 +41,7 @@ private:
     bool initRequest();
     void setLine(int offset, int value);
     void updateBridgeSide(MotorDirection dir, int duty,
-                          int offsetInA, int offsetInB, int offsetEn);
+                          int offsetInA, int offsetInB);
 };
 
 #endif // MOTORDRIVER_H
