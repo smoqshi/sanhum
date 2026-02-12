@@ -1,10 +1,9 @@
 #include "motordriver.h"
 
-#include <QCoreApplication>
-#include <QProcess>
+#include <QHostAddress>
 #include <QDebug>
 
-static int dirToInt(MotorDirection d)
+static qint8 dirToInt(MotorDirection d)
 {
     switch (d) {
     case MotorDirection::Forward:  return 1;
@@ -22,7 +21,7 @@ MotorDriver::MotorDriver(QObject *parent)
     , m_rightDuty(0)
     , m_brake(false)
 {
-    m_updateTimer.setInterval(50);   // 20 Гц
+    m_updateTimer.setInterval(50);              // 20 Гц обновления
     connect(&m_updateTimer, &QTimer::timeout,
             this, &MotorDriver::onUpdateTimer);
     m_updateTimer.start();
@@ -32,7 +31,9 @@ void MotorDriver::setLeftMotor(MotorDirection dir, int duty)
 {
     m_leftDir  = dir;
     m_leftDuty = duty;
-    // m_brake = false; // если хочешь, чтобы любое движение снимало тормоз
+    // любое обычное управление снимает экстренный тормоз
+    // (если хочешь, можно этого не делать)
+    // m_brake = false;
 }
 
 void MotorDriver::setRightMotor(MotorDirection dir, int duty)
@@ -49,39 +50,38 @@ void MotorDriver::emergencyBrake()
 
 void MotorDriver::onUpdateTimer()
 {
-    applyCommand();
+    sendCommand();
 }
 
-void MotorDriver::applyCommand()
+void MotorDriver::sendCommand()
 {
-    QString program = "python3";
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QString script  = baseDir + "/src/motor_control.py";
+    // Формат пакета (должен совпадать с motor_control.py):
+    // 1 байт: тип = 1 (моторы)
+    // 5 байт int8: left_dir, right_dir, left_duty, right_duty, brake
 
-    int leftDuty  = m_leftDuty;
-    int rightDuty = m_rightDuty;
-    MotorDirection leftDir  = m_leftDir;
-    MotorDirection rightDir = m_rightDir;
+    qint8 leftDir   = dirToInt(m_leftDir);
+    qint8 rightDir  = dirToInt(m_rightDir);
+    qint8 leftDuty  = static_cast<qint8>(qBound(0, m_leftDuty, 100));
+    qint8 rightDuty = static_cast<qint8>(qBound(0, m_rightDuty, 100));
+    qint8 brake     = m_brake ? 1 : 0;
 
-    if (m_brake) {
-        // спец‑режим тормоза, как договорились: отрицательный duty
-        leftDuty  = -100;
-        rightDuty = -100;
-        leftDir   = MotorDirection::Stop;
-        rightDir  = MotorDirection::Stop;
+    QByteArray datagram;
+    datagram.resize(1 + 5);
+    char *p = datagram.data();
+    p[0] = static_cast<char>(1);          // тип пакета
+    p[1] = static_cast<char>(leftDir);
+    p[2] = static_cast<char>(rightDir);
+    p[3] = static_cast<char>(leftDuty);
+    p[4] = static_cast<char>(rightDuty);
+    p[5] = static_cast<char>(brake);
+
+    qint64 sent = m_socket.writeDatagram(
+        datagram,
+        QHostAddress::LocalHost,
+        5005         // тот же порт, что в motor_control.py
+    );
+
+    if (sent != datagram.size()) {
+        qWarning() << "MotorDriver: failed to send UDP command";
     }
-
-    QStringList args;
-    args << script
-         << QString::number(dirToInt(leftDir))
-         << QString::number(dirToInt(rightDir))
-         << QString::number(leftDuty)
-         << QString::number(rightDuty);
-
-    QProcess *proc = new QProcess(this);
-    connect(proc, &QProcess::finished,
-            proc, &QProcess::deleteLater);
-
-    proc->start(program, args);
 }
-
