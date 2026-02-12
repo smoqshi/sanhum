@@ -8,6 +8,7 @@ export function initNetwork() {
         });
     }
 
+    // Камеры: если поток MJPEG не грузится, показываем "no signal"
     const stereoImg = document.getElementById('stereoVideo');
     const stereoNoSig = document.getElementById('stereoNoSignal');
     if (stereoImg && stereoNoSig) {
@@ -141,5 +142,3 @@ export async function pollJointState() {
         console.error('pollJointState error', e);
     }
 }
-
-
