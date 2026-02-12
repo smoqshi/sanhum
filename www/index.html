@@ -411,14 +411,20 @@
         <div class="panel cameras-column-panel">
             <h2>Cameras</h2>
             <div class="cameras-row">
-                <div class="camera-box">
-                    <div class="camera-title">Stereo camera (USB /dev/video8)</div>
-                    <div class="camera-view">
-                        <img id="stereoVideo" src="/video/stereo" alt="Stereo camera">
-                        <div class="no-signal" id="stereoNoSignal" style="display:none;">no signal</div>
+               <div class="camera-box">
+                      <div class="camera-title">Stereo LEFT (/dev/video8)</div>
+                      <div class="camera-view">
+                        <img id="stereoLeftVideo" src="/video/stereo_left" alt="Stereo left">
+                      </div>
                     </div>
-                    <div class="camera-status" id="stereoStatus">Stereo: idle</div>
-                </div>
+                    
+                    <div class="camera-box">
+                      <div class="camera-title">Stereo RIGHT (/dev/video9)</div>
+                      <div class="camera-view">
+                        <img id="stereoRightVideo" src="/video/stereo_right" alt="Stereo right">
+                      </div>
+                    </div>
+
                 <div class="camera-box">
                     <div class="camera-title">CSI camera (--camera 0)</div>
                     <div class="camera-view">
@@ -548,3 +554,4 @@
 <script type="module" src="/js/main.js"></script>
 </body>
 </html>
+
