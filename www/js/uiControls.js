@@ -247,34 +247,8 @@ function pollGamepad(dt) {
     const dead = 0.3;
     const ax = (Math.abs(lx) > dead) ? lx : 0;
     const ay = (Math.abs(ly) > dead) ? ly : 0;
-    const axR = (Math.abs(rx) > dead) ? rx : 0;
-    const ayR = (Math.abs(ry) > dead) ? ry : 0;
+    const axR = (Math.abs(rx) >
 
-    // база: LS
-    tank.vLinearCmd = -ay;
-    tank.vAngularCmdDeg = ax * 40.0;
 
-    // манипулятор
-    const turretSpeedDeg = 25.0;
-    const armSpeed = 0.25;
-    const gripSpeed = 0.4;
-
-    tank.turretAngle += axR * turretSpeedDeg * dt;
-    tank.armExtension = clamp01(
-        tank.armExtension - ayR * armSpeed * dt
-    );
-    const gripDelta = (rt - lt) * gripSpeed * dt;
-    tank.gripper = clamp01(tank.gripper + gripDelta);
-
-    // всегда отправляем команды роботу
-    sendBase();
-    sendArm();
-}
-
-function clamp01(x) {
-    if (x < 0) return 0;
-    if (x > 1) return 1;
-    return x;
-}
 
 
