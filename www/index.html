@@ -144,11 +144,6 @@
             justify-content: center;
             position: relative;
         }
-        .camera-view img {
-            max-width: 100%;
-            max-height: 220px;
-            display: block;
-        }
         .no-signal {
             position: absolute;
             color: #6b7280;
@@ -411,17 +406,16 @@
         <div class="panel cameras-column-panel">
             <h2>Cameras</h2>
             <div class="cameras-row">
-               <div class="camera-box">
-                      <div class="camera-title">Stereo LEFT (/dev/video8)</div>
-                      <div class="camera-view">
-                        <img id="stereoLeftVideo" src="/video/stereo_left" alt="Stereo left">
-                      </div>
+                <div class="camera-box">
+                    <div class="camera-title">Stereo LEFT (/dev/video8)</div>
+                    <div class="camera-view">
+                        <div class="no-signal">video disabled</div>
                     </div>
+                </div>
                 <div class="camera-box">
                     <div class="camera-title">CSI camera (--camera 0)</div>
                     <div class="camera-view">
-                        <img id="csiVideo" src="/video/csi" alt="CSI camera">
-                        <div class="no-signal" id="csiNoSignal" style="display:none;">no signal</div>
+                        <div class="no-signal">video disabled</div>
                     </div>
                     <div class="camera-status" id="csiStatus">CSI: idle</div>
                 </div>
@@ -543,12 +537,6 @@
     </div>
 </div>
 
-<script type="module">
-  import './js/robotState.js';
-  import './js/network.js';
-  import './js/chassis.js';
-  import './js/manipulator.js';
-  import './js/uiControls.js';
-</script>
+<script type="module" src="./js/main.js"></script>
 </body>
 </html>
