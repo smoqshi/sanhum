@@ -1,16 +1,23 @@
-#pragma once
+#ifndef HTTPSERVER_H
+#define HTTPSERVER_H
 
 #include <QObject>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QByteArray>
+
+class RobotModel;
+
+#ifdef Q_OS_LINUX
 #include <QProcess>
-#include "robotmodel.h"
+#endif
 
 class HttpServer : public QObject
 {
     Q_OBJECT
 public:
     explicit HttpServer(RobotModel *model, QObject *parent = nullptr);
+
     bool listen(quint16 port);
 
 private slots:
@@ -28,6 +35,9 @@ private:
     QProcess m_procCsi;
     QProcess m_procStereo;
 #endif
+
+    // буфер для последнего кадра со стереокамеры
+    QByteArray m_lastStereoFrame;
 };
 
-
+#endif // HTTPSERVER_H
