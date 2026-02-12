@@ -15,6 +15,8 @@ int main(int argc, char *argv[])
         qFatal("Failed to listen on port 8080");
     }
 
+    // Таймер дискретной симуляции.
+    // 20 мс -> dt = 0.02 c, как в стандартных учебных примерах дискретизации.[cite:1]
     QTimer timer;
     QObject::connect(&timer, &QTimer::timeout, [&model]() {
         constexpr double dt = 0.02;
