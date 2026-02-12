@@ -25,10 +25,10 @@ static void writeTextFile(const QString &path, const QString &value)
 MotorDriver::MotorDriver(QObject *parent)
     : QObject(parent)
     // подставь реальные GPIO, если другие
-    , m_leftIn1(25)
-    , m_leftIn2(8)
-    , m_rightIn1(7)
-    , m_rightIn2(1)
+    , m_leftIn1(17)
+    , m_leftIn2(27)
+    , m_rightIn1(23)
+    , m_rightIn2(24)
     , m_leftFdIn1(-1)
     , m_leftFdIn2(-1)
     , m_rightFdIn1(-1)
@@ -209,3 +209,4 @@ void MotorDriver::pwmTick()
     applyPhaseForMotor(m_rightFdIn1, m_rightFdIn2,
                        rightDir, rightDuty, m_phase);
 }
+
