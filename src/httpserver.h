@@ -36,8 +36,9 @@ private:
     QProcess m_procStereo;
 #endif
 
-    // буфер для последнего кадра со стереокамеры
+    // буферы для последних кадров
     QByteArray m_lastStereoFrame;
+    QByteArray m_lastCsiFrame;
 };
 
 #endif // HTTPSERVER_H
