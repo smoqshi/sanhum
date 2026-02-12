@@ -2,9 +2,8 @@
 
 #include <QDebug>
 #include <algorithm>
-#include <cmath>
 
-// BCM GPIO под твою схему — поменяй на свои реально используемые номера
+// BCM GPIO – подставь свои реальные номера по схеме
 static constexpr int GPIO_IN1 = 17;
 static constexpr int GPIO_IN2 = 27;
 static constexpr int GPIO_IN3 = 23;
@@ -13,7 +12,7 @@ static constexpr int GPIO_IN4 = 24;
 MotorDriver::MotorDriver(QObject *parent)
     : QObject(parent)
     , m_chip("gpiochip0")
-    , m_request()
+    , m_request( gpiod::request_builder{}.do_request() ) // временный пустой, сразу перезатрём
     , m_idxIn1(GPIO_IN1)
     , m_idxIn2(GPIO_IN2)
     , m_idxIn3(GPIO_IN3)
@@ -46,24 +45,34 @@ MotorDriver::~MotorDriver()
 
 bool MotorDriver::initRequest()
 {
-    gpiod::line_config line_cfg;
-    gpiod::line_settings settings;
+    using namespace gpiod;
 
-    settings.set_direction(gpiod::line::direction::OUTPUT);
-    settings.set_output_value(gpiod::line::value::INACTIVE);
+    // Конфигурация линий [web:18][web:27]
+    line_settings settings;
+    settings.set_direction(line::direction::OUTPUT);
+    settings.set_output_value(line::value::INACTIVE);
 
-    line_cfg.add_line_settings(
-        { m_idxIn1, m_idxIn2, m_idxIn3, m_idxIn4 },
+    line_config lcfg;
+    lcfg.add_line_settings(
+        line::offsets{ static_cast<unsigned int>(m_idxIn1),
+                       static_cast<unsigned int>(m_idxIn2),
+                       static_cast<unsigned int>(m_idxIn3),
+                       static_cast<unsigned int>(m_idxIn4) },
         settings
     );
 
-    gpiod::request_config req_cfg;
-    req_cfg.set_consumer("sanhum_motors");
+    request_config rcfg;
+    rcfg.set_consumer("sanhum_motors");
+
+    request_builder builder;
+    builder.set_chip(m_chip);
+    builder.set_request_config(rcfg);
+    builder.set_line_config(lcfg);
 
     try {
-        m_request = m_chip.request_lines(req_cfg, line_cfg);
+        m_request = builder.do_request();
     } catch (const std::exception &e) {
-        qWarning() << "MotorDriver: request_lines failed:" << e.what();
+        qWarning() << "MotorDriver: builder.do_request failed:" << e.what();
         return false;
     }
 
@@ -72,14 +81,17 @@ bool MotorDriver::initRequest()
 
 void MotorDriver::setLine(int offset, int value)
 {
-    if (!m_request) return;
+    if (!m_request)
+        return;
 
     try {
-        m_request.set_value(offset,
-                            value ? gpiod::line::value::ACTIVE
-                                  : gpiod::line::value::INACTIVE);
+        m_request.set_value(
+            static_cast<unsigned int>(offset),
+            value ? gpiod::line::value::ACTIVE : gpiod::line::value::INACTIVE
+        );
     } catch (const std::exception &e) {
-        qWarning() << "MotorDriver: set_value failed on offset" << offset << ":" << e.what();
+        qWarning() << "MotorDriver: set_value failed on offset"
+                   << offset << ":" << e.what();
     }
 }
 
@@ -100,7 +112,6 @@ void MotorDriver::setRightMotor(MotorDirection dir, int dutyPercent)
 void MotorDriver::updateBridgeSide(MotorDirection dir, int duty,
                                    int offsetInA, int offsetInB)
 {
-    // Программный PWM по IN‑линиям: duty определяет, сколько времени INA активен/INB неактивен и наоборот.
     int phaseA = 0;
     int phaseB = 0;
 
