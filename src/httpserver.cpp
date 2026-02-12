@@ -8,12 +8,12 @@
 #include <QJsonObject>
 #include <QThread>
 
+#include <QTcpServer>
+#include <QTcpSocket>
+
 #ifdef Q_OS_LINUX
 #include <QProcess>
 #endif
-
-#include <QTcpServer>
-#include <QTcpSocket>
 
 // Вспомогательный HTTP-ответ
 static QByteArray httpResponse(const QByteArray &body,
@@ -66,7 +66,7 @@ HttpServer::HttpServer(RobotModel *model, QObject *parent)
         while (true) {
             int start = m_csiBuffer.indexOf("\xFF\xD8");
             if (start < 0) {
-                // нет начала JPEG — чистим мусор
+                // нет начала JPEG — чистим мусор, если вдруг накопилось
                 if (m_csiBuffer.size() > 1024 * 1024)
                     m_csiBuffer.clear();
                 break;
@@ -349,5 +349,4 @@ void HttpServer::handleRequest(QTcpSocket *socket, const QByteArray &request)
     socket->write(httpResponse("404 from default handler", "text/plain", 404, "Not Found"));
     socket->disconnectFromHost();
 }
-
 
