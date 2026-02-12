@@ -11,15 +11,13 @@ int main(int argc, char *argv[])
     RobotModel model;
     HttpServer server(&model);
 
-    // слушаем на 8080
     if (!server.listen(8080)) {
         qFatal("Failed to listen on port 8080");
     }
 
-    // шаг интегратора модели (и обновление моторов)
     QTimer timer;
     QObject::connect(&timer, &QTimer::timeout, [&model]() {
-        constexpr double dt = 0.02; // 20 мс
+        constexpr double dt = 0.02;
         model.step(dt);
     });
     timer.start(20);
