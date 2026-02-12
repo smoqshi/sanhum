@@ -1,9 +1,3 @@
-
-
-
-
-
-
 #include "robotmodel.h"
 #include "motordriver.h"
 
@@ -300,3 +294,4 @@ QJsonObject RobotModel::makeJointStateJson() const
     obj.insert(QStringLiteral("gripper"), m_grip);
     return obj;
 }
+
