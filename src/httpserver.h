@@ -36,14 +36,6 @@ private:
     QProcess m_procStereoLeft;
     QProcess m_procStereoRight;
 #endif
-
-    QByteArray m_csiBuffer;
-    QByteArray m_stereoLeftBuffer;
-    QByteArray m_stereoRightBuffer;
-
-    QByteArray m_lastCsiFrame;
-    QByteArray m_lastStereoLeftFrame;
-    QByteArray m_lastStereoRightFrame;
 };
 
 #endif // HTTPSERVER_H
