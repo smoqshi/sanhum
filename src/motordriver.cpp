@@ -1,220 +1,167 @@
 #include "motordriver.h"
 
-#include <QFile>
-#include <QTextStream>
-#include <QThread>
-#include <QTimer>
 #include <QDebug>
+#include <gpiod.h>
+#include <cmath>
 #include <algorithm>
 
-#include <fcntl.h>
-#include <unistd.h>
-
-// ===== ЛОКАЛЬНЫЙ ХЕЛПЕР ДЛЯ ЗАПИСИ ТЕКСТА В ФАЙЛ =====
-static void writeTextFile(const QString &path, const QString &value)
-{
-    QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        return;
-
-    QTextStream ts(&f);
-    ts << value;
-    f.close();
-}
-
-// ===== КОНСТРУКТОР / ДЕСТРУКТОР =====
 MotorDriver::MotorDriver(QObject *parent)
     : QObject(parent)
-    // подставь реальные GPIO, если другие
-    , m_leftIn1(17)
-    , m_leftIn2(27)
-    , m_rightIn1(23)
-    , m_rightIn2(24)
-    , m_leftFdIn1(-1)
-    , m_leftFdIn2(-1)
-    , m_rightFdIn1(-1)
-    , m_rightFdIn2(-1)
-    , m_leftDuty(0)
-    , m_rightDuty(0)
+    , m_chip(nullptr)
+    , m_in1(nullptr)
+    , m_in2(nullptr)
+    , m_in3(nullptr)
+    , m_in4(nullptr)
+    , m_ena(nullptr)
+    , m_enb(nullptr)
     , m_leftDir(MotorDirection::Stop)
     , m_rightDir(MotorDirection::Stop)
-    , m_phase(0)
+    , m_leftDuty(0)
+    , m_rightDuty(0)
+    , m_pwmCounter(0)
 {
-    // Экспорт GPIO
-    exportGpio(m_leftIn1);
-    exportGpio(m_leftIn2);
-    exportGpio(m_rightIn1);
-    exportGpio(m_rightIn2);
+    if (!initLines()) {
+        qWarning() << "MotorDriver: failed to init GPIO lines via libgpiod";
+    }
 
-    // Направление – вывод
-    setGpioDirection(m_leftIn1, true);
-    setGpioDirection(m_leftIn2, true);
-    setGpioDirection(m_rightIn1, true);
-    setGpioDirection(m_rightIn2, true);
-
-    // Открываем value как файлы
-    m_leftFdIn1  = openGpioValue(m_leftIn1);
-    m_leftFdIn2  = openGpioValue(m_leftIn2);
-    m_rightFdIn1 = openGpioValue(m_rightIn1);
-    m_rightFdIn2 = openGpioValue(m_rightIn2);
-
-    // Таймер «квантования» PWM: 1 мс
-    connect(&m_pwmTimer, &QTimer::timeout,
-            this, &MotorDriver::pwmTick);
-    m_pwmTimer.start(1); // 1 ms
+    // если у тебя раньше pwmTick дергался от своего таймера в этом классе — верни это:
+    // QTimer *timer = new QTimer(this);
+    // connect(timer, &QTimer::timeout, this, &MotorDriver::pwmTick);
+    // timer->start(1);
 }
 
 MotorDriver::~MotorDriver()
 {
-    if (m_leftFdIn1  >= 0) ::close(m_leftFdIn1);
-    if (m_leftFdIn2  >= 0) ::close(m_leftFdIn2);
-    if (m_rightFdIn1 >= 0) ::close(m_rightFdIn1);
-    if (m_rightFdIn2 >= 0) ::close(m_rightFdIn2);
+    if (m_in1) gpiod_line_release(m_in1);
+    if (m_in2) gpiod_line_release(m_in2);
+    if (m_in3) gpiod_line_release(m_in3);
+    if (m_in4) gpiod_line_release(m_in4);
+    if (m_ena) gpiod_line_release(m_ena);
+    if (m_enb) gpiod_line_release(m_enb);
+    if (m_chip) gpiod_chip_close(m_chip);
 }
 
-// ===== РАБОТА С SYSFS GPIO =====
-int MotorDriver::exportGpio(int gpio)
+bool MotorDriver::initLines()
 {
-    writeTextFile("/sys/class/gpio/export", QString::number(gpio));
-    // Небольшая пауза, чтобы ядро создало gpioX/
-    QThread::msleep(5);
-    return 0;
-}
+    // На Pi 5 твои "обычные" GPIO 17, 22, 23, 24 находятся в gpiochip0 [web:5].
+    // Предположим старую разводку:
+    //  IN1 = GPIO17, IN2 = GPIO27, IN3 = GPIO23, IN4 = GPIO24
+    //  ENA = GPIO22, ENB = GPIO18
+    // Если у тебя другая схема — просто поправь номера ниже на нужные (по gpioinfo).
+    const int gpioIn1 = 17;
+    const int gpioIn2 = 27;
+    const int gpioIn3 = 23;
+    const int gpioIn4 = 24;
+    const int gpioEnA = 22;
+    const int gpioEnB = 18;
 
-int MotorDriver::setGpioDirection(int gpio, bool output)
-{
-    const QString path =
-        QString("/sys/class/gpio/gpio%1/direction").arg(gpio);
-    writeTextFile(path, output ? "out" : "in");
-    return 0;
-}
-
-int MotorDriver::openGpioValue(int gpio)
-{
-    const QString path =
-        QString("/sys/class/gpio/gpio%1/value").arg(gpio);
-    int fd = ::open(path.toLocal8Bit().constData(), O_WRONLY);
-    return fd;
-}
-
-void MotorDriver::writeGpio(int fd, bool value)
-{
-    if (fd < 0)
-        return;
-
-    const char c = value ? '1' : '0';
-    ::lseek(fd, 0, SEEK_SET);
-    ::write(fd, &c, 1);
-}
-
-// ===== ПРИМЕНЕНИЕ PWM К ОДНОМУ МОСТУ (ШИРИНА ЧЕРЕЗ ПЕРИОД) =====
-void MotorDriver::applyPhaseForMotor(int fdA,
-                                     int fdB,
-                                     MotorDirection dir,
-                                     int duty,
-                                     int phase)
-{
-    // duty: 0..100 — интерпретируем как «уровень команды»
-    // phase: счётчик миллисекунд
-
-    if (duty <= 0 || dir == MotorDirection::Stop) {
-        writeGpio(fdA, false);
-        writeGpio(fdB, false);
-        return;
+    m_chip = gpiod_chip_open_by_name("gpiochip0");
+    if (!m_chip) {
+        qWarning() << "MotorDriver: gpiod_chip_open_by_name(gpiochip0) failed";
+        return false;
     }
 
-    // Задаём минимальный и максимальный период импульсов (мс)
-    // Малый duty → большой период (редкие импульсы)
-    // Большой duty → малый период (частые импульсы)
-    const int minPeriod = 10;   // 10 мс (≈100 Гц)
-    const int maxPeriod = 200;  // 200 мс (5 Гц)
+    auto getLine = [this](int num, const char *name) -> gpiod_line* {
+        gpiod_line *line = gpiod_chip_get_line(m_chip, num);
+        if (!line) {
+            qWarning() << "MotorDriver: gpiod_chip_get_line failed for" << name << "num" << num;
+        }
+        return line;
+    };
 
-    // dutyNorm в (0,1]
-    double dutyNorm = static_cast<double>(duty) / 100.0;
-    dutyNorm = std::clamp(dutyNorm, 0.01, 1.0);
+    m_in1 = getLine(gpioIn1, "IN1");
+    m_in2 = getLine(gpioIn2, "IN2");
+    m_in3 = getLine(gpioIn3, "IN3");
+    m_in4 = getLine(gpioIn4, "IN4");
+    m_ena = getLine(gpioEnA, "ENA");
+    m_enb = getLine(gpioEnB, "ENB");
 
-    // Период обратно пропорционален duty: чем меньше команда, тем длиннее период
-    const double inv = 1.0 / dutyNorm;
-    int period = static_cast<int>(
-        minPeriod + (maxPeriod - minPeriod) * (inv - 1.0)
-        );
-    if (period < minPeriod) period = minPeriod;
-    if (period > maxPeriod) period = maxPeriod;
-
-    // Счётчик фазы: для каждого мотора мы используем общий phase (мс) по модулю периода
-    const int localPhase = period > 0 ? (phase % period) : 0;
-
-    // Доля времени, когда мотор включён (формируем мягкую «скважность» внутри периода)
-    const double onFraction = dutyNorm; // можно сделать нелинейной, если надо
-    const int onTime = static_cast<int>(period * onFraction);
-
-    const bool on = (localPhase < onTime);
-    if (!on) {
-        // выключено
-        writeGpio(fdA, false);
-        writeGpio(fdB, false);
-        return;
+    bool ok = m_in1 && m_in2 && m_in3 && m_in4 && m_ena && m_enb;
+    if (!ok) {
+        qWarning() << "MotorDriver: some GPIO lines are null";
+        return false;
     }
 
-    // включено в нужном направлении
+    auto requestOut = [](gpiod_line *line, const char *consumer, int initVal) {
+        int ret = gpiod_line_request_output(line, consumer, initVal);
+        if (ret < 0) {
+            qWarning() << "MotorDriver: gpiod_line_request_output failed for" << consumer << "ret=" << ret;
+            return false;
+        }
+        return true;
+    };
+
+    if (!requestOut(m_in1, "sanhum_in1", 0)) return false;
+    if (!requestOut(m_in2, "sanhum_in2", 0)) return false;
+    if (!requestOut(m_in3, "sanhum_in3", 0)) return false;
+    if (!requestOut(m_in4, "sanhum_in4", 0)) return false;
+    if (!requestOut(m_ena, "sanhum_ena", 0)) return false;
+    if (!requestOut(m_enb, "sanhum_enb", 0)) return false;
+
+    return true;
+}
+
+void MotorDriver::setLine(gpiod_line *line, int value)
+{
+    if (!line) return;
+    int ret = gpiod_line_set_value(line, value ? 1 : 0);
+    if (ret < 0) {
+        qWarning() << "MotorDriver: gpiod_line_set_value failed, value=" << value;
+    }
+}
+
+void MotorDriver::setLeftMotor(MotorDirection dir, int dutyPercent)
+{
+    dutyPercent = std::clamp(dutyPercent, 0, 100);
+    m_leftDir = dir;
+    m_leftDuty = dutyPercent;
+}
+
+void MotorDriver::setRightMotor(MotorDirection dir, int dutyPercent)
+{
+    dutyPercent = std::clamp(dutyPercent, 0, 100);
+    m_rightDir = dir;
+    m_rightDuty = dutyPercent;
+}
+
+void MotorDriver::updateBridgeSide(MotorDirection dir, int duty, gpiod_line *inA, gpiod_line *inB, gpiod_line *en)
+{
+    // Простейший программный PWM: duty по EN, направление по IN1/IN2
     switch (dir) {
+    case MotorDirection::Stop:
+        setLine(inA, 0);
+        setLine(inB, 0);
+        setLine(en, 0);
+        break;
     case MotorDirection::Forward:
-        writeGpio(fdA, true);
-        writeGpio(fdB, false);
+        setLine(inA, 1);
+        setLine(inB, 0);
+        // EN будет управляться duty ниже
         break;
     case MotorDirection::Backward:
-        writeGpio(fdA, false);
-        writeGpio(fdB, true);
+        setLine(inA, 0);
+        setLine(inB, 1);
+        // EN будет управляться duty ниже
         break;
-    default:
-        writeGpio(fdA, false);
-        writeGpio(fdB, false);
-        break;
+    }
+
+    if (dir == MotorDirection::Stop) {
+        setLine(en, 0);
+    } else {
+        int level = (m_pwmCounter < duty) ? 1 : 0;
+        setLine(en, level);
     }
 }
 
-// ===== ПУБЛИЧНЫЕ МЕТОДЫ =====
-void MotorDriver::setLeftMotor(MotorDirection dir, int speed_percent)
-{
-    qDebug() << "Left motor dir=" << int(dir) << "duty=" << speed_percent;
-
-    if (speed_percent < 0) speed_percent = 0;
-    if (speed_percent > 100) speed_percent = 100;
-
-    m_leftDir.store(dir);
-    m_leftDuty.store(speed_percent);
-}
-
-void MotorDriver::setRightMotor(MotorDirection dir, int speed_percent)
-{
-    qDebug() << "Right motor dir=" << int(dir) << "duty=" << speed_percent;
-
-    if (speed_percent < 0) speed_percent = 0;
-    if (speed_percent > 100) speed_percent = 100;
-
-    m_rightDir.store(dir);
-    m_rightDuty.store(speed_percent);
-}
-
-
-
-// ===== ТИК PWM =====
 void MotorDriver::pwmTick()
 {
-    // phase — глобальный счётчик миллисекунд
-    m_phase++;
-    if (m_phase > 1000000)
-        m_phase = 0;
+    // увеличиваем счётчик PWM
+    m_pwmCounter++;
+    if (m_pwmCounter >= PWM_PERIOD)
+        m_pwmCounter = 0;
 
-    const int leftDuty   = m_leftDuty.load();
-    const int rightDuty  = m_rightDuty.load();
-    const MotorDirection leftDir  = m_leftDir.load();
-    const MotorDirection rightDir = m_rightDir.load();
-
-    applyPhaseForMotor(m_leftFdIn1,  m_leftFdIn2,
-                       leftDir, leftDuty, m_phase);
-    applyPhaseForMotor(m_rightFdIn1, m_rightFdIn2,
-                       rightDir, rightDuty, m_phase);
+    updateBridgeSide(m_leftDir,  m_leftDuty,  m_in1, m_in2, m_ena);
+    updateBridgeSide(m_rightDir, m_rightDuty, m_in3, m_in4, m_enb);
 }
 
 
