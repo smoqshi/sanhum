@@ -33,7 +33,8 @@ private:
 
 #ifdef Q_OS_LINUX
     QProcess m_procCsi;
-    QProcess m_procStereo;      // один ffmpeg, внутри split на левый/правый
+    QProcess m_procStereoLeft;
+    QProcess m_procStereoRight;
 #endif
 };
 
