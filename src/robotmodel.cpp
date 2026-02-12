@@ -41,7 +41,7 @@ void RobotModel::emergencyStop()
     m_motorDriver.setRightMotor(MotorDirection::Stop, 0);
 }
 
-// Сюда приходят команды /api/base (линейная v и угловая w)
+// /api/base
 void RobotModel::setBaseCommand(double v, double w)
 {
     m_v = v;
@@ -61,11 +61,9 @@ void RobotModel::step(double dt)
         return;
     }
 
-    // Максимальная линейная скорость колеса и "полухаус" базы
-    const double maxWheelLinear = 0.5;   // м/с при duty=100%
+    const double maxWheelLinear = 0.5;   // м/с при duty 100%
     const double halfTrack      = 0.15;  // плечо базы, м
 
-    // Преобразование команды (v, w) в скорости левого/правого колеса
     const double vL = m_v - m_w * halfTrack;
     const double vR = m_v + m_w * halfTrack;
 
@@ -76,7 +74,6 @@ void RobotModel::step(double dt)
         nR = vR / maxWheelLinear;
     }
 
-    // Ограничение -1..1
     nL = std::max(-1.0, std::min(1.0, nL));
     nR = std::max(-1.0, std::min(1.0, nR));
 
@@ -100,7 +97,7 @@ void RobotModel::step(double dt)
     m_motorDriver.setRightMotor(right.first, right.second);
 }
 
-// ===== МАНИПУЛЯТОР / ЭФФЕКТОР =====
+// ===== МАНИПУЛЯТОР =====
 
 void RobotModel::setArmExtension(double ext01)
 {
@@ -156,8 +153,6 @@ static double readCpuTempC()
 
 static double readBoardTempC()
 {
-    // Для упрощения используем ту же зону, в реальном проекте
-    // можно привязать к датчику на плате робота.
 #ifdef Q_OS_LINUX
     return readCpuTempC();
 #else
@@ -173,7 +168,6 @@ static double readCpuLoadPercent()
         QTextStream ts(&f);
         double l1 = 0.0;
         ts >> l1;
-        // Оценка: 1.0 нагрузки ~ 100% на одноядерной системе
         return std::clamp(l1 * 100.0, 0.0, 400.0);
     }
 #endif
@@ -186,15 +180,13 @@ static void readWifiInfo(QString &ssidOut, int &rssiOut)
     rssiOut = 0;
 
 #ifdef Q_OS_LINUX
-    // Простейший вариант: парсим вывод iwconfig wlan0
     QProcess proc;
-    proc.start("iwconfig", QStringList() << "wlan0");
+    proc.start(QStringLiteral("iwconfig"), QStringList() << QStringLiteral("wlan0"));
     if (!proc.waitForFinished(200)) {
         return;
     }
     const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput());
 
-    // ESSID:"..."  и  Signal level=-60 dBm
     QRegularExpression essidRe(R"(ESSID:\"([^\"]*)\")");
     QRegularExpression sigRe(R"(Signal level=([-0-9]+)\s*dBm)");
 
@@ -216,8 +208,7 @@ static void readWifiInfo(QString &ssidOut, int &rssiOut)
 
 static double readBatteryVoltage()
 {
-    // Здесь должен быть реальный код чтения АЦП/платы питания.
-    // Пока оставим значение из модели, если оно задано.
+    // TODO: подключить реальный АЦП/датчик
     return 0.0;
 }
 
@@ -231,7 +222,6 @@ QJsonObject RobotModel::makeStatusJson() const
 
 #ifdef Q_OS_LINUX
     if (isRunningOnRaspberry()) {
-        // CPU / плата
         const double cpuTemp   = readCpuTempC();
         const double boardTemp = readBoardTempC();
         const double cpuLoad   = readCpuLoadPercent();
@@ -240,25 +230,21 @@ QJsonObject RobotModel::makeStatusJson() const
         obj.insert(QStringLiteral("board_temp_c"), boardTemp);
         obj.insert(QStringLiteral("cpu_load_percent"), cpuLoad);
 
-        // Питание — здесь можно заменить на чтение с реальной платы
         const double batt = (m_batteryV > 0.0) ? m_batteryV : readBatteryVoltage();
         obj.insert(QStringLiteral("battery_v"), batt);
 
-        // Токи — placeholders до подключения реальных датчиков тока
         obj.insert(QStringLiteral("current_total_a"), 0.0);
         obj.insert(QStringLiteral("current_5v_a"),    0.0);
         obj.insert(QStringLiteral("current_12v_a"),   0.0);
         obj.insert(QStringLiteral("current_motors_a"),0.0);
         obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
 
-        // Wi‑Fi
         QString ssid;
         int rssi = 0;
         readWifiInfo(ssid, rssi);
         obj.insert(QStringLiteral("wifi_ssid"), ssid);
         obj.insert(QStringLiteral("wifi_rssi_dbm"), rssi);
     } else {
-        // Не Raspberry под Linux: можно вернуть только модельные значения
         obj.insert(QStringLiteral("cpu_temp_c"),   m_cpuTemp);
         obj.insert(QStringLiteral("board_temp_c"), m_boardTemp);
         obj.insert(QStringLiteral("cpu_load_percent"), 0.0);
@@ -272,7 +258,6 @@ QJsonObject RobotModel::makeStatusJson() const
         obj.insert(QStringLiteral("wifi_rssi_dbm"), 0);
     }
 #else
-    // Windows / другие системы — используем только модельные поля
     obj.insert(QStringLiteral("cpu_temp_c"),   m_cpuTemp);
     obj.insert(QStringLiteral("board_temp_c"), m_boardTemp);
     obj.insert(QStringLiteral("cpu_load_percent"), 0.0);
@@ -297,4 +282,6 @@ QJsonObject RobotModel::makeJointStateJson() const
     obj.insert(QStringLiteral("gripper"),    m_grip);
     return obj;
 }
+
+
 
