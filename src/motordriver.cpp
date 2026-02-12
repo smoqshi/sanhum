@@ -4,6 +4,7 @@
 #include <QTextStream>
 #include <QThread>
 #include <QTimer>
+#include <QDebug>
 #include <algorithm>
 
 #include <fcntl.h>
@@ -175,6 +176,7 @@ void MotorDriver::applyPhaseForMotor(int fdA,
 // ===== ПУБЛИЧНЫЕ МЕТОДЫ =====
 void MotorDriver::setLeftMotor(MotorDirection dir, int speed_percent)
 {
+    qDebug() << "Left motor dir=" << int(dir) << "duty=" << duty;
     if (speed_percent < 0)   speed_percent = 0;
     if (speed_percent > 100) speed_percent = 100;
 
@@ -184,6 +186,7 @@ void MotorDriver::setLeftMotor(MotorDirection dir, int speed_percent)
 
 void MotorDriver::setRightMotor(MotorDirection dir, int speed_percent)
 {
+    qDebug() << "Right motor dir=" << int(dir) << "duty=" << duty;
     if (speed_percent < 0)   speed_percent = 0;
     if (speed_percent > 100) speed_percent = 100;
 
@@ -209,4 +212,5 @@ void MotorDriver::pwmTick()
     applyPhaseForMotor(m_rightFdIn1, m_rightFdIn2,
                        rightDir, rightDuty, m_phase);
 }
+
 
