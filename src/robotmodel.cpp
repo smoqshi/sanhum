@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <QRegularExpression>
+#include <QProcess>
 
 RobotModel::RobotModel(QObject *parent)
     : QObject(parent)
@@ -25,7 +26,7 @@ RobotModel::RobotModel(QObject *parent)
     , m_motorDriver(new MotorDriver(this))
     , m_halfTrack(0.15)
     , m_maxWheelLinear(0.5)
-    , m_parkingBrake(false)        // <--- добавлено
+    , m_parkingBrake(false)
 {
 }
 
@@ -50,13 +51,12 @@ void RobotModel::updateMotorsFromCommand()
     if (!m_motorDriver)
         return;
 
-    if (m_emergency || m_parkingBrake) {   // <--- учитываем стояночный тормоз
+    if (m_emergency || m_parkingBrake) {
         m_motorDriver->setLeftMotor(MotorDirection::Stop, 0);
         m_motorDriver->setRightMotor(MotorDirection::Stop, 0);
         return;
     }
 
-    // Преобразование (v, w) в скорости колес
     double vLeft = m_targetV - m_halfTrack * m_targetW;
     double vRight = m_targetV + m_halfTrack * m_targetW;
 
@@ -94,8 +94,6 @@ void RobotModel::setTurretAngle(double angleDeg)
 {
     m_turretDeg = angleDeg;
 }
-
-// Вспомогательные функции для чтения телеметрии
 
 static bool isRunningOnRaspberry()
 {
@@ -196,8 +194,6 @@ void RobotModel::toggleParkingBrake()
 
 void RobotModel::step(double dt)
 {
-    // Обновление скоростей и положения
-    // При emergency/parkingBrake моторами занимается updateMotorsFromCommand()
     updateMotorsFromCommand();
 
     if (m_emergency || m_parkingBrake) {
@@ -213,11 +209,9 @@ void RobotModel::step(double dt)
     m_pos += QVector2D(dx, dy);
     m_angle += m_w * dt;
 
-    // Обновляем телеметрию, если на Raspberry
     if (isRunningOnRaspberry()) {
         m_boardTemp = readBoardTempC();
         m_cpuTemp = readCpuTempC();
-        // m_batteryV можно обновлять через АЦП, пока оставим как есть
     }
 
     emit stateChanged();
@@ -232,7 +226,7 @@ QJsonObject RobotModel::makeStatusJson() const
     obj.insert(QStringLiteral("v"), m_v);
     obj.insert(QStringLiteral("w"), m_w);
     obj.insert(QStringLiteral("emergency"), m_emergency);
-    obj.insert(QStringLiteral("parking_brake"), m_parkingBrake);   // <--- новое поле
+    obj.insert(QStringLiteral("parking_brake"), m_parkingBrake);
     obj.insert(QStringLiteral("battery"), m_batteryV);
     obj.insert(QStringLiteral("cpu_temp"), m_cpuTemp);
     obj.insert(QStringLiteral("board_temp"), m_boardTemp);
