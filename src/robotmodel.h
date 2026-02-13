@@ -46,7 +46,7 @@ public:
     QJsonObject makeStatusJson() const;
     QJsonObject makeJointStateJson() const;
 
-    // Стояночный тормоз (для индикации)
+    // Стояночный тормоз (для индикации/логики)
     bool parkingBrake() const { return m_parkingBrake; }
     void setParkingBrake(bool on);
     void toggleParkingBrake();
@@ -81,10 +81,7 @@ private:
     double m_halfTrack;
     double m_maxWheelLinear;
 
-    bool m_parkingBrake;   // <--- НОВОЕ поле
+    bool m_parkingBrake;   // новый флаг
 };
 
 #endif // ROBOTMODEL_H
-
-#endif // ROBOTMODEL_H
-
