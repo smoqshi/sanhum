@@ -166,8 +166,8 @@ static void readWifiInfo(QString &ssidOut, int &rssiOut)
     proc.waitForFinished(500);
     const QString out = QString::fromLocal8Bit(proc.readAllStandardOutput());
 
-    QRegularExpression reSsid(R"(ESSID:\\"([^\\"]*)\\")");
-    QRegularExpression reRssi(R"(Signal level=(-?\\d+) dBm)");
+    QRegularExpression reSsid(R"(ESSID:\"([^\"]*)\")");
+    QRegularExpression reRssi(R"(Signal level=(-?\d+) dBm)");
 
     auto m1 = reSsid.match(out);
     if (m1.hasMatch()) {
@@ -217,7 +217,7 @@ void RobotModel::step(double dt)
         m_cpuTemp   = readCpuTempC();
         m_cpuLoad   = readCpuLoadPercent();
         readWifiInfo(m_wifiSsid, m_wifiRssi);
-        // токи, если появятся, тоже можно прочитать здесь
+
     }
 
     emit stateChanged();
@@ -233,15 +233,12 @@ QJsonObject RobotModel::makeStatusJson() const
     obj.insert(QStringLiteral("w"), m_w);
     obj.insert(QStringLiteral("emergency"), m_emergency);
     obj.insert(QStringLiteral("parking_brake"), m_parkingBrake);
-
-    // формат под твой JS:
-    obj.insert(QStringLiteral("wifi_ssid"),      m_wifiSsid);
-    obj.insert(QStringLiteral("wifi_rssi_dbm"),  m_wifiRssi);
-    obj.insert(QStringLiteral("cpu_temp_c"),     m_cpuTemp);
-    obj.insert(QStringLiteral("cpu_load_percent"), m_cpuLoad);
-    obj.insert(QStringLiteral("board_temp_c"),   m_boardTemp);
-    obj.insert(QStringLiteral("battery_v"),      m_batteryV);
-
+    obj.insert(QStringLiteral("battery"), m_batteryV);
+    obj.insert(QStringLiteral("cpu_temp"), m_cpuTemp);
+    obj.insert(QStringLiteral("board_temp"), m_boardTemp);
+    obj.insert(QStringLiteral("cpu_load"), m_cpuLoad);
+    obj.insert(QStringLiteral("wifi_ssid"), m_wifiSsid);
+    obj.insert(QStringLiteral("wifi_rssi"), m_wifiRssi);
     return obj;
 }
 
@@ -253,3 +250,5 @@ QJsonObject RobotModel::makeJointStateJson() const
     obj.insert(QStringLiteral("turret"), m_turretDeg);
     return obj;
 }
+
+
