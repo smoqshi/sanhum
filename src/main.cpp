@@ -11,20 +11,16 @@ int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
 
-    // Определяем путь к каталогу с бинарником
-    // и поднимаемся на уровень репозитория:
-    //   <repo>/build/.../sanhum_binary  ->  <repo>/src/motor_control.py
+    // Считаем, что бинарь лежит в корне проекта (там же, где и папка src)
+    // Например: /home/vector/Desktop/sanhum/sanhum_binary
+    // Тогда motor_control.py находится по пути: ./src/motor_control.py
     QDir appDir(QCoreApplication::applicationDirPath());
-    // Поднимаемся на один уровень вверх (если бинарь лежит в build/)
-    // при необходимости скорректируй количество cdUp().
-    appDir.cdUp();              // теперь appDir указывает на корень репозитория, если структура: <repo>/build/...
     QString motorScriptPath = appDir.filePath("src/motor_control.py");
 
     qInfo().noquote() << "motor_control.py path:" << motorScriptPath;
 
     QProcess *motorProcess = new QProcess(&app);
 
-    // Лог stdout/stderr Python-скрипта
     QObject::connect(motorProcess, &QProcess::readyReadStandardOutput, [motorProcess]() {
         QByteArray data = motorProcess->readAllStandardOutput();
         if (!data.isEmpty())
@@ -34,15 +30,6 @@ int main(int argc, char *argv[])
         QByteArray data = motorProcess->readAllStandardError();
         if (!data.isEmpty())
             qWarning().noquote() << "[motor_control.py stderr]" << data.trimmed();
-    });
-
-    // При желании можно включить автоперезапуск:
-    QObject::connect(motorProcess,
-                     QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                     [&motorScriptPath, motorProcess](int code, QProcess::ExitStatus status) {
-        qWarning() << "motor_control.py finished with code" << code << "status" << status;
-        Q_UNUSED(status);
-        // motorProcess->start("/usr/bin/python3", QStringList() << motorScriptPath);
     });
 
     QString program = "/usr/bin/python3";
@@ -71,3 +58,4 @@ int main(int argc, char *argv[])
 
     return app.exec();
 }
+
