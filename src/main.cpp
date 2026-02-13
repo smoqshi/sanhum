@@ -2,6 +2,7 @@
 #include <QTimer>
 #include <QProcess>
 #include <QDebug>
+#include <QDir>
 
 #include "robotmodel.h"
 #include "httpserver.h"
@@ -10,39 +11,49 @@ int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
 
-    // Запуск демона управления моторами (motor_control.py)
-    // Предполагается, что проект лежит в /home/vector/sanhum
-    // При необходимости скорректируй путь ниже.
+    // Определяем путь к каталогу с бинарником
+    // и поднимаемся на уровень репозитория:
+    //   <repo>/build/.../sanhum_binary  ->  <repo>/src/motor_control.py
+    QDir appDir(QCoreApplication::applicationDirPath());
+    // Поднимаемся на один уровень вверх (если бинарь лежит в build/)
+    // при необходимости скорректируй количество cdUp().
+    appDir.cdUp();              // теперь appDir указывает на корень репозитория, если структура: <repo>/build/...
+    QString motorScriptPath = appDir.filePath("src/motor_control.py");
+
+    qInfo().noquote() << "motor_control.py path:" << motorScriptPath;
+
     QProcess *motorProcess = new QProcess(&app);
 
-    // Лог ошибок от Python-скрипта в stdout/stderr приложения
+    // Лог stdout/stderr Python-скрипта
     QObject::connect(motorProcess, &QProcess::readyReadStandardOutput, [motorProcess]() {
         QByteArray data = motorProcess->readAllStandardOutput();
-        qInfo().noquote() << "[motor_control.py stdout]" << data.trimmed();
+        if (!data.isEmpty())
+            qInfo().noquote() << "[motor_control.py stdout]" << data.trimmed();
     });
     QObject::connect(motorProcess, &QProcess::readyReadStandardError, [motorProcess]() {
         QByteArray data = motorProcess->readAllStandardError();
-        qWarning().noquote() << "[motor_control.py stderr]" << data.trimmed();
+        if (!data.isEmpty())
+            qWarning().noquote() << "[motor_control.py stderr]" << data.trimmed();
     });
 
-    // Автоперезапуск, если скрипт упал
+    // При желании можно включить автоперезапуск:
     QObject::connect(motorProcess,
                      QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                     [&app, motorProcess](int code, QProcess::ExitStatus status) {
+                     [&motorScriptPath, motorProcess](int code, QProcess::ExitStatus status) {
         qWarning() << "motor_control.py finished with code" << code << "status" << status;
-        // Можно сделать автоперезапуск, если нужно
-        motorProcess->start();
+        Q_UNUSED(status);
+        // motorProcess->start("/usr/bin/python3", QStringList() << motorScriptPath);
     });
 
-    // Настройка и запуск процесса
     QString program = "/usr/bin/python3";
     QStringList arguments;
-    arguments << "/home/vector/sanhum/src/motor_control.py";
+    arguments << motorScriptPath;
 
     motorProcess->start(program, arguments);
 
     if (!motorProcess->waitForStarted(3000)) {
-        qFatal("Failed to start motor_control.py");
+        qFatal("Failed to start motor_control.py at path %s",
+               qPrintable(motorScriptPath));
     }
 
     RobotModel model;
