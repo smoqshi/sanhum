@@ -13,6 +13,10 @@ try:
 except ImportError:
     serial = None
 
+# -------------------------------
+# GPIO и тайминги
+# -------------------------------
+
 GPIO_D0 = 17  # MOTOR 1 D0
 GPIO_D1 = 27  # MOTOR 1 D1
 GPIO_D2 = 23  # MOTOR 2 D2
@@ -26,11 +30,19 @@ PERIOD = 1.0 / PWM_FREQ_HZ
 UPDATE_HZ = 100.0
 UPDATE_DT = 1.0 / UPDATE_HZ
 
+# -------------------------------
+# UDP протокол
+# -------------------------------
+
 UDP_HOST = "127.0.0.1"
 UDP_PORT = 5005
 
-# 1 байт тип, дальше 5 байт int8:
-# left_dir, right_dir, left_duty, right_duty, brake_toggle
+# Пакет моторов:
+# 1 байт: тип = 1
+# 5 байт int8: left_dir, right_dir, left_duty, right_duty, brake_toggle
+# dir: -1, 0, 1
+# duty: 0..100
+# brake_toggle: 0/1 (1 = был кадр с нажатием B, переключить стояночный тормоз)
 MOTOR_PKT_FMT = "bbbbb"
 
 
@@ -48,11 +60,17 @@ class MotorCommand:
 motor_cmd = MotorCommand()
 motor_lock = threading.Lock()
 
-# внутренний флаг стояночного тормоза
+# внутренний флаг стояночного тормоза (зажать моторы)
 parking_brake = False
 
 
 def drive_one_motor(dir_, duty, pin0, pin1, values):
+    """
+    Forward: PWM на pin0, pin1 = 0
+    Reverse: PWM на pin1, pin0 = 0
+    Stop:    0/0
+    Brake:   1/1 (через parking_brake)
+    """
     duty = max(0, min(100, duty))
     if duty == 0 or dir_ == 0:
         values[pin0] = Value.INACTIVE
@@ -74,6 +92,12 @@ def drive_one_motor(dir_, duty, pin0, pin1, values):
 
 
 def motor_control_loop():
+    """
+    - читает motor_cmd;
+    - обрабатывает toggle стояночного тормоза;
+    - при включённом тормозе подаёт 1 на все пины;
+    - при выключенном — обычный ШИМ.
+    """
     global parking_brake
 
     config = {
@@ -99,16 +123,16 @@ def motor_control_loop():
                 left_duty = motor_cmd.left_duty
                 right_duty = motor_cmd.right_duty
                 brake_toggle = motor_cmd.brake_toggle
-                motor_cmd.brake_toggle = 0  # сбрасываем одноразовый флаг
+                motor_cmd.brake_toggle = 0  # одноразовый флаг
 
-            # Обработка стояночного тормоза (toggle по кнопке B)
+            # Toggle стояночного тормоза по B
             if brake_toggle:
                 parking_brake = not parking_brake
 
             values = {}
 
             if parking_brake:
-                # Стояночный тормоз: 1 на все пины
+                # Стояночный тормоз: 1 на все входы моста
                 values[GPIO_D0] = Value.ACTIVE
                 values[GPIO_D1] = Value.ACTIVE
                 values[GPIO_D2] = Value.ACTIVE
@@ -117,7 +141,7 @@ def motor_control_loop():
                 time.sleep(PERIOD)
                 continue
 
-            # Обычное управление без «авто-рекуперации»
+            # Обычное управление
             left_on, left_pwm_pin = drive_one_motor(
                 left_dir, left_duty, GPIO_D0, GPIO_D1, values
             )
@@ -137,8 +161,10 @@ def motor_control_loop():
                 time.sleep(PERIOD)
                 continue
 
+            # фаза ON
             time.sleep(max_on)
 
+            # фаза OFF только для линий с PWM
             off_values = {}
             if left_pwm_pin is not None:
                 off_values[left_pwm_pin] = Value.INACTIVE
@@ -205,7 +231,7 @@ def udp_server_loop():
                 motor_cmd.right_dir = int(right_dir)
                 motor_cmd.left_duty = int(left_duty)
                 motor_cmd.right_duty = int(right_duty)
-                # brake_toggle трактуем как «была нажата B в этом пакете»
+                # brake_toggle = факт нажатия B в этом кадре (0/1)
                 motor_cmd.brake_toggle = 1 if brake_toggle else 0
 
         elif pkt_type == 2:
