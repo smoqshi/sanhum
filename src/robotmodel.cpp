@@ -27,6 +27,9 @@ RobotModel::RobotModel(QObject *parent)
     , m_halfTrack(0.15)
     , m_maxWheelLinear(0.5)
     , m_parkingBrake(false)
+    , m_cpuLoad(0.0)
+    , m_wifiSsid()
+    , m_wifiRssi(0)
 {
 }
 
@@ -69,7 +72,7 @@ void RobotModel::updateMotorsFromCommand()
         dir = (vWheel > 0) ? MotorDirection::Forward : MotorDirection::Backward;
         double mag = qMin(qAbs(vWheel) / m_maxWheelLinear, 1.0);
         duty = int(mag * 100.0);
-        };
+    };
 
     MotorDirection dirL, dirR;
     int dutyL, dutyR;
@@ -212,9 +215,8 @@ void RobotModel::step(double dt)
     if (isRunningOnRaspberry()) {
         m_boardTemp = readBoardTempC();
         m_cpuTemp   = readCpuTempC();
-        // тут при желании можно добавить:
-        // double load = readCpuLoadPercent();
-        // QString ssid; int rssi; readWifiInfo(ssid, rssi);
+        m_cpuLoad   = readCpuLoadPercent();
+        readWifiInfo(m_wifiSsid, m_wifiRssi);
     }
 
     emit stateChanged();
@@ -233,6 +235,9 @@ QJsonObject RobotModel::makeStatusJson() const
     obj.insert(QStringLiteral("battery"), m_batteryV);
     obj.insert(QStringLiteral("cpu_temp"), m_cpuTemp);
     obj.insert(QStringLiteral("board_temp"), m_boardTemp);
+    obj.insert(QStringLiteral("cpu_load"), m_cpuLoad);
+    obj.insert(QStringLiteral("wifi_ssid"), m_wifiSsid);
+    obj.insert(QStringLiteral("wifi_rssi"), m_wifiRssi);
     return obj;
 }
 
@@ -244,4 +249,3 @@ QJsonObject RobotModel::makeJointStateJson() const
     obj.insert(QStringLiteral("turret"), m_turretDeg);
     return obj;
 }
-
