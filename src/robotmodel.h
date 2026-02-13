@@ -2,59 +2,58 @@
 #define ROBOTMODEL_H
 
 #include <QObject>
+#include <QVector2D>
 #include <QJsonObject>
-
-class MotorDriver;
 
 class RobotModel : public QObject
 {
     Q_OBJECT
 public:
     explicit RobotModel(QObject *parent = nullptr);
-    ~RobotModel();
 
-    // /api/base
-    void setBaseCommand(double v, double w);
+    // Положение и ориентация робота
+    const QVector2D &position() const { return m_pos; }
+    double angle() const { return m_angle; }
 
-    // манипулятор
-    void setArmExtension(double ext01);
-    void setGripper(double grip01);
-    void setTurretAngle(double angleDeg);
+    // Линейная и угловая скорости
+    double linearVelocity() const { return m_v; }
+    double angularVelocity() const { return m_w; }
 
-    // аварийная остановка
-    void emergencyStop();
+    // Команды
+    void setTargetVelocities(double v, double w);
+    void emergencyStop(bool on);
+    bool emergency() const { return m_emergency; }
 
-    // шаг модели (вызывается из таймера)
+    // Стояночный тормоз (для индикации и логики)
+    bool parkingBrake() const { return m_parkingBrake; }
+    void setParkingBrake(bool on);
+    void toggleParkingBrake();
+
+    // Шаг симуляции
     void step(double dt);
 
-    // JSON для веб‑клиента
+    // Сериализация состояния для веб-клиента
     QJsonObject makeStatusJson() const;
-    QJsonObject makeJointStateJson() const;
+
+signals:
+    void stateChanged();
 
 private:
-    // динамика базы
-    double m_v;          // линейная скорость команды, м/с
-    double m_w;          // угловая скорость команды, рад/с
-    bool   m_emergency;
+    QVector2D m_pos;
+    double m_angle;
 
-    // манипулятор
-    double m_ext;        // 0..1
-    double m_grip;       // 0..1
-    double m_turretDeg;  // градусы
+    double m_v;
+    double m_w;
 
-    // диагностика (для не‑Raspberry окружения)
-    double m_batteryV;
-    double m_cpuTemp;
-    double m_boardTemp;
+    double m_targetV;
+    double m_targetW;
 
-    // драйвер моторов
-    MotorDriver *m_motorDriver;
+    bool m_emergency;
+    bool m_parkingBrake;  // новый флаг стояночного тормоза
 
-    // параметры базы
-    double m_halfTrack;      // половина колеи, м
-    double m_maxWheelLinear; // макс. линейная скорость колеса при duty=100%, м/с
-
-    void updateMotorsFromCommand();
+    // внутренние параметры модели, трения и т.п.
+    double m_linAccel;
+    double m_angAccel;
 };
 
 #endif // ROBOTMODEL_H
