@@ -69,7 +69,7 @@ void RobotModel::updateMotorsFromCommand()
         dir = (vWheel > 0) ? MotorDirection::Forward : MotorDirection::Backward;
         double mag = qMin(qAbs(vWheel) / m_maxWheelLinear, 1.0);
         duty = int(mag * 100.0);
-    };
+        };
 
     MotorDirection dirL, dirR;
     int dutyL, dutyR;
@@ -211,7 +211,10 @@ void RobotModel::step(double dt)
 
     if (isRunningOnRaspberry()) {
         m_boardTemp = readBoardTempC();
-        m_cpuTemp = readCpuTempC();
+        m_cpuTemp   = readCpuTempC();
+        // тут при желании можно добавить:
+        // double load = readCpuLoadPercent();
+        // QString ssid; int rssi; readWifiInfo(ssid, rssi);
     }
 
     emit stateChanged();
