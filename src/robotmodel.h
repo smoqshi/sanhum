@@ -20,12 +20,10 @@ public:
     double linearVelocity() const { return m_v; }
     double angularVelocity() const { return m_w; }
 
-    // Базовое управление
     void setBaseCommand(double v, double w);
     void emergencyStop();
     bool isEmergency() const { return m_emergency; }
 
-    // Манипулятор
     double armExtension() const { return m_ext; }
     double gripper() const { return m_grip; }
     double turretAngleDeg() const { return m_turretDeg; }
@@ -34,19 +32,15 @@ public:
     void setGripper(double grip01);
     void setTurretAngle(double angleDeg);
 
-    // Состояние платформы
     double batteryVoltage() const { return m_batteryV; }
     double cpuTemperature() const { return m_cpuTemp; }
     double boardTemperature() const { return m_boardTemp; }
 
-    // Шаг симуляции
     void step(double dt);
 
-    // Состояние для веб-клиента
     QJsonObject makeStatusJson() const;
     QJsonObject makeJointStateJson() const;
 
-    // Стояночный тормоз (для индикации/логики)
     bool parkingBrake() const { return m_parkingBrake; }
     void setParkingBrake(bool on);
     void toggleParkingBrake();
@@ -56,10 +50,6 @@ signals:
 
 private:
     void updateMotorsFromCommand();
-
-    double m_cpuLoad;
-    QString m_wifiSsid;
-    int m_wifiRssi;
 
     QVector2D m_pos;
     double m_angle;
@@ -85,7 +75,12 @@ private:
     double m_halfTrack;
     double m_maxWheelLinear;
 
-    bool m_parkingBrake;   // новый флаг
+    bool m_parkingBrake;
+
+    // телеметрия малинки
+    double m_cpuLoad;
+    QString m_wifiSsid;
+    int m_wifiRssi;
 };
 
 #endif // ROBOTMODEL_H
