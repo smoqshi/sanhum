@@ -25,10 +25,10 @@ GPIO_D3 = 24  # MOTOR 2 D3
 
 CHIP_PATH = "/dev/gpiochip0"
 
-PWM_FREQ_HZ = 100.0          # частота ШИМ
+PWM_FREQ_HZ = 100.0  # частота ШИМ
 PERIOD = 1.0 / PWM_FREQ_HZ
 
-UPDATE_HZ = 100.0            # частота обновления команд
+UPDATE_HZ = 100.0  # частота обновления команд
 UPDATE_DT = 1.0 / UPDATE_HZ
 
 # -------------------------------
@@ -41,19 +41,19 @@ UDP_PORT = 5005
 # Пакет моторов:
 # 1 байт: тип = 1
 # 5 байт int8: left_dir, right_dir, left_duty, right_duty, brake
-#   dir:  -1, 0, 1
-#   duty: 0..100
-#   brake: 0/1 (1 = принудительный тормоз)
+# dir: -1, 0, 1
+# duty: 0..100
+# brake: 0/1 (1 = принудительный тормоз)
 MOTOR_PKT_FMT = "bbbbb"  # 5 * int8
 
 # Пакет манипулятора:
 # 1 байт: тип = 2
 # N байт: payload, прямо пересылается на ESP32 (ниже простейший пример)
 
-
 # -------------------------------
 # Состояние команд моторов
 # -------------------------------
+
 
 class MotorCommand:
     __slots__ = ("left_dir", "right_dir", "left_duty", "right_duty", "brake")
@@ -69,25 +69,29 @@ class MotorCommand:
 motor_cmd = MotorCommand()
 motor_lock = threading.Lock()
 
+# флаг для «рекуперативного» торможения
+last_had_motion = False
 
 # -------------------------------
 # Логика драйвера D0/D1/D2/D3
 # -------------------------------
 
+
 def drive_one_motor(dir_, duty, pin0, pin1, values):
     """
     Таблица (для одного мотора):
-      Forward (speed):  PWM на D0/D2, другой вход 0
-      Reverse (speed):  PWM на D1/D3, другой вход 0
-      Stop:             0/0
-      Brake:            1/1 (обрабатывается выше по флагу brake)
 
-    dir_:  -1, 0, 1
-    duty:  0..100
+    Forward (speed): PWM на D0/D2, другой вход 0
+    Reverse (speed): PWM на D1/D3, другой вход 0
+    Stop: 0/0
+    Brake: 1/1 (обрабатывается выше по флагу brake)
+
+    dir_: -1, 0, 1
+    duty: 0..100
+
     values: словарь pin -> Value.* на начало периода
     """
     duty = max(0, min(100, duty))
-
     if duty == 0 or dir_ == 0:
         values[pin0] = Value.INACTIVE
         values[pin1] = Value.INACTIVE
@@ -114,21 +118,21 @@ def motor_control_loop():
     Цикл управления моторами:
     - читает последнее состояние motor_cmd;
     - применяет тормоз, если brake=1;
+    - при отпускании стика выполняет «рекуперативное» торможение;
     - иначе реализует таблицу D0/D1/D2/D3 с PWM.
     """
+    global last_had_motion
+
     config = {
-        GPIO_D0: gpiod.LineSettings(direction=Direction.OUTPUT,
-                                    output_value=Value.INACTIVE),
-        GPIO_D1: gpiod.LineSettings(direction=Direction.OUTPUT,
-                                    output_value=Value.INACTIVE),
-        GPIO_D2: gpiod.LineSettings(direction=Direction.OUTPUT,
-                                    output_value=Value.INACTIVE),
-        GPIO_D3: gpiod.LineSettings(direction=Direction.OUTPUT,
-                                    output_value=Value.INACTIVE),
+        GPIO_D0: gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIVE),
+        GPIO_D1: gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIVE),
+        GPIO_D2: gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIVE),
+        GPIO_D3: gpiod.LineSettings(direction=Direction.OUTPUT, output_value=Value.INACTIVE),
     }
 
     with gpiod.request_lines(CHIP_PATH, consumer="sanhum_py", config=config) as req:
         last_time = time.time()
+
         while True:
             now = time.time()
             dt = now - last_time
@@ -145,14 +149,34 @@ def motor_control_loop():
 
             values = {}
 
-            # Экстренный тормоз: оба входа каждого мотора = 1
+            # Определяем, была ли команда движения
+            has_motion_cmd = (
+                (left_dir != 0 and left_duty > 0)
+                or (right_dir != 0 and right_duty > 0)
+            )
+
+            # 1) Жёсткий тормоз (кнопка B прислала brake=1) — стояночный тормоз
             if brake:
                 values[GPIO_D0] = Value.ACTIVE
                 values[GPIO_D1] = Value.ACTIVE
                 values[GPIO_D2] = Value.ACTIVE
                 values[GPIO_D3] = Value.ACTIVE
                 req.set_values(values)
+                last_had_motion = False
                 time.sleep(PERIOD)
+                continue
+
+            # 2) «Рекуперативное» торможение при отпускании стика:
+            # если в прошлом тике была команда движения, а теперь стики отпущены
+            if last_had_motion and not has_motion_cmd:
+                values[GPIO_D0] = Value.ACTIVE
+                values[GPIO_D1] = Value.ACTIVE
+                values[GPIO_D2] = Value.ACTIVE
+                values[GPIO_D3] = Value.ACTIVE
+                req.set_values(values)
+                # один период в режиме торможения
+                time.sleep(PERIOD)
+                last_had_motion = False
                 continue
 
             # Обычное управление
@@ -166,10 +190,14 @@ def motor_control_loop():
             req.set_values(values)
 
             max_on = max(left_on, right_on)
+
             if max_on <= 0.0:
                 # стоп / без PWM
                 time.sleep(PERIOD)
+                last_had_motion = False
                 continue
+
+            last_had_motion = True
 
             if max_on >= PERIOD:
                 # практически 100% заполнение
@@ -196,6 +224,7 @@ def motor_control_loop():
 # ESP32 / манипулятор (заготовка)
 # -------------------------------
 
+
 def open_esp32_serial(port="/dev/ttyUSB0", baudrate=115200) -> Optional["serial.Serial"]:
     if serial is None:
         return None
@@ -208,14 +237,17 @@ def open_esp32_serial(port="/dev/ttyUSB0", baudrate=115200) -> Optional["serial.
 def handle_manipulator_packet(data: bytes, ser: Optional["serial.Serial"]) -> None:
     """
     Очень простой протокол для примера:
-      cmd = data[0]
-      если cmd == 1:
+
+    cmd = data[0]
+    если cmd == 1:
         joint_id = data[1]
-        value = int16 LE (data[2:4])
+        value   = int16 LE (data[2:4])
+
         отправляем на ESP32 строку: "J {joint_id} {value}\\n"
     """
     if ser is None:
         return
+
     if len(data) < 1:
         return
 
@@ -236,7 +268,10 @@ def handle_manipulator_packet(data: bytes, ser: Optional["serial.Serial"]) -> No
 # UDP сервер
 # -------------------------------
 
+
 def udp_server_loop():
+    global last_had_motion
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((UDP_HOST, UDP_PORT))
 
@@ -248,7 +283,6 @@ def udp_server_loop():
             continue
 
         pkt_type = data[0]
-
         # Для отладки можно раскомментировать:
         # print("PKT:", list(data))
 
@@ -257,15 +291,21 @@ def udp_server_loop():
             need = 1 + struct.calcsize(MOTOR_PKT_FMT)
             if len(data) < need:
                 continue
+
             _, left_dir, right_dir, left_duty, right_duty, brake = struct.unpack(
                 "B" + MOTOR_PKT_FMT, data[:need]
             )
+
             with motor_lock:
                 motor_cmd.left_dir = int(left_dir)
                 motor_cmd.right_dir = int(right_dir)
                 motor_cmd.left_duty = int(left_duty)
                 motor_cmd.right_duty = int(right_duty)
                 motor_cmd.brake = int(brake)
+
+            # если приходит явный brake=1, сразу сбрасываем флаг движения
+            if brake:
+                last_had_motion = False
 
         # Тип 2: команда манипулятора
         elif pkt_type == 2:
@@ -276,9 +316,11 @@ def udp_server_loop():
 # entry point
 # -------------------------------
 
+
 def main():
     motor_thread = threading.Thread(target=motor_control_loop, daemon=True)
     motor_thread.start()
+
     udp_server_loop()
 
 
