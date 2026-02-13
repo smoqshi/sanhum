@@ -39,47 +39,6 @@ void RobotModel::emergencyStop()
 {
     m_emergency = true;
     m_v = 0.0;
-    m_w = 0.0;#include "robotmodel.h"
-#include "motordriver.h"
-
-#include <QtMath>
-#include <QJsonObject>
-#include <QFile>
-#include <QTextStream>
-#include <QRegularExpression>
-#include <QProcess>
-
-RobotModel::RobotModel(QObject *parent)
-    : QObject(parent)
-    , m_pos(0.0f, 0.0f)
-    , m_angle(0.0)
-    , m_v(0.0)
-    , m_w(0.0)
-    , m_targetV(0.0)
-    , m_targetW(0.0)
-    , m_emergency(false)
-    , m_ext(0.5)
-    , m_grip(0.3)
-    , m_turretDeg(0.0)
-    , m_batteryV(12.0)
-    , m_cpuTemp(40.0)
-    , m_boardTemp(35.0)
-    , m_motorDriver(new MotorDriver(this))
-    , m_halfTrack(0.15)
-    , m_maxWheelLinear(0.5)
-    , m_parkingBrake(false)
-    , m_cpuLoad(0.0)
-    , m_wifiSsid()
-    , m_wifiRssi(0)
-{
-}
-
-RobotModel::~RobotModel() = default;
-
-void RobotModel::emergencyStop()
-{
-    m_emergency = true;
-    m_v = 0.0;
     m_w = 0.0;
     updateMotorsFromCommand();
 }
