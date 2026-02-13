@@ -57,6 +57,10 @@ signals:
 private:
     void updateMotorsFromCommand();
 
+    double m_cpuLoad;
+    QString m_wifiSsid;
+    int m_wifiRssi;
+
     QVector2D m_pos;
     double m_angle;
 
@@ -85,3 +89,4 @@ private:
 };
 
 #endif // ROBOTMODEL_H
+
