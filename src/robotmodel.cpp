@@ -220,92 +220,92 @@ static void readWifiInfo(QString &ssidOut, int &rssiOut)
         int val = m2.captured(1).toInt(&ok);
         if (ok) {
             rssiOut = val;
-        }
-    }
-#endif
-}
+        }#include "robotmodel.h"
 
-static double readBatteryVoltage()
+#include <QtMath>
+#include <QJsonObject>
+
+RobotModel::RobotModel(QObject *parent)
+    : QObject(parent)
+    , m_pos(0.0f, 0.0f)
+    , m_angle(0.0)
+    , m_v(0.0)
+    , m_w(0.0)
+    , m_targetV(0.0)
+    , m_targetW(0.0)
+    , m_emergency(false)
+    , m_parkingBrake(false)
+    , m_linAccel(1.0)
+    , m_angAccel(1.0)
 {
-    // TODO: подключить реальный АЦП/датчик
-    return 0.0;
 }
 
-// ===== JSON ДЛЯ WEB‑КЛИЕНТА =====
+void RobotModel::setTargetVelocities(double v, double w)
+{
+    m_targetV = v;
+    m_targetW = w;
+}
+
+void RobotModel::emergencyStop(bool on)
+{
+    m_emergency = on;
+    if (m_emergency) {
+        m_v = 0.0;
+        m_w = 0.0;
+    }
+}
+
+void RobotModel::setParkingBrake(bool on)
+{
+    if (m_parkingBrake == on)
+        return;
+    m_parkingBrake = on;
+}
+
+void RobotModel::toggleParkingBrake()
+{
+    m_parkingBrake = !m_parkingBrake;
+}
+
+void RobotModel::step(double dt)
+{
+    if (m_emergency || m_parkingBrake) {
+        // При аварийном стопе или стояночном тормозе скорости = 0
+        m_v = 0.0;
+        m_w = 0.0;
+    } else {
+        // Простая динамика: v, w стремятся к target с ограничением по ускорению
+        double dv = m_targetV - m_v;
+        double maxDv = m_linAccel * dt;
+        if (qAbs(dv) > maxDv)
+            dv = (dv > 0 ? maxDv : -maxDv);
+        m_v += dv;
+
+        double dw = m_targetW - m_w;
+        double maxDw = m_angAccel * dt;
+        if (qAbs(dw) > maxDw)
+            dw = (dw > 0 ? maxDw : -maxDw);
+        m_w += dw;
+    }
+
+    // Обновляем положение
+    double dx = m_v * qCos(m_angle) * dt;
+    double dy = m_v * qSin(m_angle) * dt;
+    m_pos += QVector2D(dx, dy);
+    m_angle += m_w * dt;
+
+    emit stateChanged();
+}
 
 QJsonObject RobotModel::makeStatusJson() const
 {
     QJsonObject obj;
+    obj.insert(QStringLiteral("x"), m_pos.x());
+    obj.insert(QStringLiteral("y"), m_pos.y());
+    obj.insert(QStringLiteral("angle"), m_angle);
+    obj.insert(QStringLiteral("v"), m_v);
+    obj.insert(QStringLiteral("w"), m_w);
     obj.insert(QStringLiteral("emergency"), m_emergency);
-
-#ifdef Q_OS_LINUX
-    if (isRunningOnRaspberry()) {
-        const double cpuTemp   = readCpuTempC();
-        const double boardTemp = readBoardTempC();
-        const double cpuLoad   = readCpuLoadPercent();
-
-        obj.insert(QStringLiteral("cpu_temp_c"), cpuTemp);
-        obj.insert(QStringLiteral("board_temp_c"), boardTemp);
-        obj.insert(QStringLiteral("cpu_load_percent"), cpuLoad);
-
-        const double batt = (m_batteryV > 0.0) ? m_batteryV : readBatteryVoltage();
-        obj.insert(QStringLiteral("battery_v"), batt);
-
-        obj.insert(QStringLiteral("current_total_a"), 0.0);
-        obj.insert(QStringLiteral("current_5v_a"), 0.0);
-        obj.insert(QStringLiteral("current_12v_a"), 0.0);
-        obj.insert(QStringLiteral("current_motors_a"), 0.0);
-        obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
-
-        QString ssid;
-        int rssi = 0;
-        readWifiInfo(ssid, rssi);
-        obj.insert(QStringLiteral("wifi_ssid"), ssid);
-        obj.insert(QStringLiteral("wifi_rssi_dbm"), rssi);
-    } else {
-        obj.insert(QStringLiteral("cpu_temp_c"), m_cpuTemp);
-        obj.insert(QStringLiteral("board_temp_c"), m_boardTemp);
-        obj.insert(QStringLiteral("cpu_load_percent"), 0.0);
-
-        obj.insert(QStringLiteral("battery_v"), m_batteryV);
-
-        obj.insert(QStringLiteral("current_total_a"), 0.0);
-        obj.insert(QStringLiteral("current_5v_a"), 0.0);
-        obj.insert(QStringLiteral("current_12v_a"), 0.0);
-        obj.insert(QStringLiteral("current_motors_a"), 0.0);
-        obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
-
-        obj.insert(QStringLiteral("wifi_ssid"), QStringLiteral("--"));
-        obj.insert(QStringLiteral("wifi_rssi_dbm"), 0);
-    }
-#else
-    obj.insert(QStringLiteral("cpu_temp_c"), m_cpuTemp);
-    obj.insert(QStringLiteral("board_temp_c"), m_boardTemp);
-    obj.insert(QStringLiteral("cpu_load_percent"), 0.0);
-
-    obj.insert(QStringLiteral("battery_v"), m_batteryV);
-
-    obj.insert(QStringLiteral("current_total_a"), 0.0);
-    obj.insert(QStringLiteral("current_5v_a"), 0.0);
-    obj.insert(QStringLiteral("current_12v_a"), 0.0);
-    obj.insert(QStringLiteral("current_motors_a"), 0.0);
-    obj.insert(QStringLiteral("current_gpio_ma"), 0.0);
-
-    obj.insert(QStringLiteral("wifi_ssid"), QStringLiteral("--"));
-    obj.insert(QStringLiteral("wifi_rssi_dbm"), 0);
-#endif
-
+    obj.insert(QStringLiteral("parking_brake"), m_parkingBrake);
     return obj;
 }
-
-QJsonObject RobotModel::makeJointStateJson() const
-{
-    QJsonObject obj;
-    obj.insert(QStringLiteral("turret_deg"), m_turretDeg);
-    obj.insert(QStringLiteral("arm_ext"), m_ext);
-    obj.insert(QStringLiteral("gripper"), m_grip);
-    return obj;
-}
-
-
-
