@@ -1,35 +1,45 @@
-import { tank } from './robotState.js';
-import { initChassis, drawChassis } from './chassis.js';
+import { initNetwork, pollStatus, pollJointState } from './network.js';
+import { initChassis, drawChassis, updateBase } from './chassis.js';
 import { initManipulator, drawManipulator } from './manipulator.js';
 import { initUI, updateControls, updateDashboardFromState } from './uiControls.js';
-import { initNetwork, pollStatus } from './network.js';
 
-const canvas = document.getElementById('tankCanvas');
-const ctx = canvas.getContext('2d');
+let canvas, ctx;
+let lastTime = 0;
 
-initChassis(canvas);
-initManipulator();
-initUI();
-initNetwork();
+function init() {
+    canvas = document.getElementById('tankCanvas');
+    if (!canvas) {
+        console.error('Canvas with id "tankCanvas" not found');
+        return;
+    }
+    ctx = canvas.getContext('2d');
 
-// один раз запросить статус при старте
-pollStatus();
+    initChassis(canvas);
+    initManipulator();
+    initNetwork();
+    initUI();
 
-let lastTime = performance.now();
+    requestAnimationFrame(loop);
 
-function loop(time) {
-  const dt = (time - lastTime) / 1000.0;
-  lastTime = time;
-
-  // dt влияет только на внутреннее состояние, визуальный центр остаётся неизменным
-  updateControls(dt);
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawChassis(ctx);
-  drawManipulator(ctx);
-  updateDashboardFromState();
-
-  requestAnimationFrame(loop);
+    // периодический опрос статуса и суставов
+    setInterval(pollStatus, 500);
+    setInterval(pollJointState, 200);
 }
 
-requestAnimationFrame(loop);
+function loop(timestamp) {
+    const dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+
+    updateControls(dt);        // обновление команд оператора
+    updateBase(dt);            // интеграция движения базы
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawChassis(ctx);          // отрисовка корпуса
+    drawManipulator(ctx);      // отрисовка манипулятора
+
+    updateDashboardFromState(); // обновление правого блока
+
+    requestAnimationFrame(loop);
+}
+
+window.addEventListener('load', init);

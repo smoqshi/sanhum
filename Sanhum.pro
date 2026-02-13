@@ -1,11 +1,12 @@
-QT       += core gui network
-greaterThan(QT_MAJOR_VERSION, 5): QT += widgets
+QT += core network gui
+
+CONFIG += c++17 console
+CONFIG -= app_bundle
 
 TARGET = Sanhum
 TEMPLATE = app
 
-CONFIG += c++17
-CONFIG += release
+LIBS += -lgpiodcxx
 
 SOURCES += \
     src/main.cpp \
@@ -20,27 +21,34 @@ HEADERS += \
     src/motordriver.h \
     src/armkinematics.h
 
-RESOURCES += resources.qrc
+# Платформо-зависимые библиотеки
+win32 {
+    # под Windows libgpiod нет – не линкуем
+} else {
+    # под Linux линкуем libgpiod/libgpiodcxx
+    LIBS += -lgpiodcxx -lgpiod
+}
 
 DISTFILES += \
     www/index.html \
+    www/js/cameras.js \
+    www/js/main.js \
     www/js/robotState.js \
-    www/js/network.js \
     www/js/chassis.js \
     www/js/manipulator.js \
     www/js/uiControls.js \
-    www/js/main.js
+    www/js/network.js
+
+RESOURCES += resources.qrc
 
 win32 {
     QMAKE_POST_LINK += xcopy /E /I /Y \"$$PWD\\www\" \"$$OUT_PWD\\www\" & echo.
 } else {
-    # На Linux / Raspberry Pi собираем в исходной директории,
-    # папка www уже лежит рядом с бинарём, лишнее копирование не нужно.
+    !equals(PWD, OUT_PWD) {
+        QMAKE_POST_LINK += cp -r \"$$PWD/www\" \"$$OUT_PWD/www\"
+    }
 }
 
-# motor_control.py из src копируем в папку с бинарником после сборки
-target.path = $$OUT_PWD
-INSTALLS += target
 
-# post-link step: копировать motor_control.py рядом с бинарём
-QMAKE_POST_LINK += $$quote(cp $$PWD/src/motor_control.py $$OUT_PWD/motor_control.py;)
+
+

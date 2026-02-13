@@ -1,18 +1,16 @@
-#ifndef HTTPSERVER_H
-#define HTTPSERVER_H
+#pragma once
 
 #include <QObject>
 #include <QTcpServer>
 #include <QTcpSocket>
-
-class RobotModel;
+#include <QProcess>
+#include "robotmodel.h"
 
 class HttpServer : public QObject
 {
     Q_OBJECT
 public:
     explicit HttpServer(RobotModel *model, QObject *parent = nullptr);
-
     bool listen(quint16 port);
 
 private slots:
@@ -25,6 +23,11 @@ private:
 
     QTcpServer m_server;
     RobotModel *m_model;
+
+#ifdef Q_OS_LINUX
+    QProcess m_procCsi;
+    QProcess m_procStereo;
+#endif
 };
 
-#endif // HTTPSERVER_H
+
