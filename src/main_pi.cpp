@@ -9,13 +9,9 @@ public:
         publisher_ = this->create_publisher<sensor_msgs::msg::Image>("camera/image_raw", 10);
         cmd_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
             "cmd_vel", 10, std::bind(&SanhumRobot::cmdVelCallback, this, _1));
-        joints_sub_ = this->create_subscription<std_msgs::msg::Float32MultiArray>(
-            "manipulator/joint_commands", 10, std::bind(&SanhumRobot::jointsCallback, this, _1));
-        
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(100), std::bind(&SanhumRobot::timerCallback, this));
-        
-        RCLCPP_INFO(this->get_logger(), "🦾 Sanhum Robot Pi started");
+        RCLCPP_INFO(this->get_logger(), "🦾 Sanhum Pi started");
     }
 
 private:
@@ -27,18 +23,12 @@ private:
         msg.data.resize(480 * 1920, 128);
         publisher_->publish(msg);
     }
-    
     void cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg) {
-        RCLCPP_INFO(this->get_logger(), "CmdVel: X=%.2f Z=%.2f", msg->linear.x, msg->angular.z);
-    }
-    
-    void jointsCallback(const std_msgs::msg::Float32MultiArray::SharedPtr msg) {
-        RCLCPP_INFO(this->get_logger(), "Joints: %zu", msg->data.size());
+        RCLCPP_INFO(this->get_logger(), "Cmd: %.2f/%.2f", msg->linear.x, msg->angular.z);
     }
 
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr publisher_;
     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_sub_;
-    rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr joints_sub_;
     rclcpp::TimerBase::SharedPtr timer_;
 };
 
