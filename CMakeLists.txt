@@ -1,16 +1,14 @@
 cmake_minimum_required(VERSION 3.8)
 project(sanhum)
 
-# ПЛАТФОРМА Pi = ТОЛЬКО main_pi.cpp
-if(PLATFORM_PI OR UNIX)
+# Автоопределение платформы
+if(UNIX AND NOT APPLE)
+  set(PLATFORM_PI ON)
   message(STATUS "=== RASPBERRY PI HEADLESS ===")
   add_compile_definitions(PLATFORM_PI)
-  set(PROJECT_SOURCES src/main_pi.cpp)
 else()
+  set(PLATFORM_PI OFF)
   message(STATUS "=== DESKTOP Qt GUI ===")
-  find_package(Qt6 REQUIRED COMPONENTS Core Widgets SerialPort)
-  add_compile_definitions(PLATFORM_WINDOWS)
-  file(GLOB_RECURSE PROJECT_SOURCES src/*.cpp)
 endif()
 
 find_package(ament_cmake REQUIRED)
@@ -19,12 +17,18 @@ find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
-add_executable(sanhum ${PROJECT_SOURCES})
-ament_target_dependencies(sanhum rclcpp sensor_msgs geometry_msgs std_msgs)
-
-if(NOT (PLATFORM_PI OR UNIX))
+if(PLATFORM_PI)
+  # Pi: ТОЛЬКО main_pi.cpp
+  add_executable(sanhum src/main_pi.cpp)
+else()
+  # Desktop: все Qt файлы
+  find_package(Qt6 REQUIRED COMPONENTS Core Widgets SerialPort)
+  file(GLOB_RECURSE SOURCES src/*.cpp)
+  add_executable(sanhum ${SOURCES})
   target_link_libraries(sanhum Qt6::Core Qt6::Widgets Qt6::SerialPort)
+  add_compile_definitions(PLATFORM_WINDOWS)
 endif()
 
+ament_target_dependencies(sanhum rclcpp sensor_msgs geometry_msgs std_msgs)
 install(TARGETS sanhum DESTINATION lib/${PROJECT_NAME})
 ament_package()
