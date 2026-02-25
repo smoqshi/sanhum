@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>sanhum_qt</name>
+  <version>0.0.1</version>
+  <description>Qt-based ROS2 Jazzy GUI for Sanhum robot (Windows server + Raspberry Pi client)</description>
+
+  <maintainer email="you@example.com">Your Name</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>vision_msgs</depend>
+  <depend>cv_bridge</depend>
+
+  <exec_depend>ros2launch</exec_depend>
+
+  <export>
+  </export>
+</package>
+
