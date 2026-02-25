@@ -1,5 +1,5 @@
 #include "yolo_detector.h"
-#include <cv_bridge/cv_bridge.h>
+#include <cv_bridge/cv_bridge.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 
@@ -120,3 +120,4 @@ void YoloDetector::imageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
 
     det_pub_->publish(det_array);
 }
+
