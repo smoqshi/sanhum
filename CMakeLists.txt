@@ -1,42 +1,77 @@
-cmake_minimum_required(VERSION 3.8)
-project(sanhum)
+cmake_minimum_required(VERSION 3.16)
+project(sanhum LANGUAGES CXX)
 
-# Default to C++17
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17)
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
+# Qt6
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
 
-# ИСПРАВЛЕНО: ВСЕ find_package()
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+# ROS2
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(vision_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
 
-# ИСПРАВЛЕНО: ТВОЙ main.cpp + зависимости линковки
-add_executable(sanhum_node src/main.cpp)
-ament_target_dependencies(sanhum_node 
-  rclcpp 
-  std_msgs 
-  sensor_msgs 
-  geometry_msgs
+# OpenCV
+find_package(OpenCV REQUIRED core imgproc dnn highgui)
+
+# Источники и заголовки
+file(GLOB_RECURSE PROJECT_SOURCES
+    src/*.cpp
+)
+file(GLOB_RECURSE PROJECT_HEADERS
+    include/*.h
 )
 
-# ИСПРАВЛЕНО: install (отсутствовал)
-install(TARGETS
-  sanhum_node
-  DESTINATION lib/${PROJECT_NAME}
+add_executable(${PROJECT_NAME}
+    ${PROJECT_SOURCES}
+    ${PROJECT_HEADERS}
 )
 
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  set(ament_cmake_copyright_FOUND TRUE)
-  set(ament_lint_auto_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
+target_include_directories(${PROJECT_NAME} PRIVATE
+    include
+    ${OpenCV_INCLUDE_DIRS}
+    /opt/ros/jazzy/include
+)
+
+if(WIN32)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE PLATFORM_WINDOWS)
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE PLATFORM_LINUX PLATFORM_PI)
 endif()
 
+target_link_libraries(${PROJECT_NAME}
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Network
+    Qt6::SerialPort
+    ${OpenCV_LIBS}
+)
+
+ament_target_dependencies(${PROJECT_NAME}
+    rclcpp
+    geometry_msgs
+    nav_msgs
+    sensor_msgs
+    std_msgs
+    vision_msgs
+    cv_bridge
+)
+
+install(TARGETS ${PROJECT_NAME}
+    DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
+
+
