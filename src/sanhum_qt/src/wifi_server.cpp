@@ -5,7 +5,7 @@
 #include <QImage>
 #include <QByteArray>
 
-#include <cv_bridge/cv_bridge.h>
+#include <cv_bridge/cv_bridge.hpp>
 #include <opencv2/imgcodecs.hpp>
 
 WifiServer::WifiServer(std::shared_ptr<rclcpp::Node> node, QObject *parent)
@@ -120,3 +120,4 @@ void WifiServer::sendDiagnosticsToClient(const std_msgs::msg::String::SharedPtr 
     client_->write(doc.toJson(QJsonDocument::Compact));
     client_->write("\n");
 }
+
