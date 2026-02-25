@@ -1,5 +1,4 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>sanhum</name>
   <version>0.0.0</version>
@@ -12,8 +11,7 @@
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
 
-  <build_type>ament_cmake</build_type>  ← ЭТОГО НЕТ!
-
   <export>
+    <build_type>ament_cmake</build_type>  <!-- ПЕРЕМЕСТИ СЮДА! -->
   </export>
 </package>
