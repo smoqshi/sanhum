@@ -3,11 +3,12 @@ project(sanhum)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
-# Pi = ТОЛЬКО main_pi.cpp
 if(UNIX)
   add_executable(sanhum src/main_pi.cpp)
-  message(STATUS "Pi build: main_pi.cpp")
 else()
   find_package(Qt6 REQUIRED COMPONENTS Core Widgets SerialPort)
   file(GLOB_RECURSE SOURCES src/*.cpp)
