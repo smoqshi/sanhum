@@ -1,78 +1,73 @@
-#include "cameras.h"
-#include <opencv2/opencv.hpp>
-#include <cv_bridge/cv_bridge.hpp>
+#include "esp32_driver.h"
 
-using namespace std::chrono_literals;
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <QSerialPort>
+#include <QSerialPortInfo>
+#include <QByteArray>
 
-class CamerasImpl
+Esp32Driver::Esp32Driver(std::shared_ptr<rclcpp::Node> node, QObject *parent)
+    : QObject(parent),
+      node_(std::move(node))
 {
-public:
-    cv::VideoCapture cap_left;
-    cv::VideoCapture cap_right;
-    cv::VideoCapture cap_mono;
-};
+    // Настройка порта (можно поменять имя устройства под свою плату)
+    serial_.setPortName("/dev/ttyACM0");
+    serial_.setBaudRate(QSerialPort::Baud115200);
+    serial_.setDataBits(QSerialPort::Data8);
+    serial_.setParity(QSerialPort::NoParity);
+    serial_.setStopBits(QSerialPort::OneStop);
+    serial_.setFlowControl(QSerialPort::NoFlowControl);
 
-Cameras::Cameras(std::shared_ptr<rclcpp::Node> node)
-    : node_(std::move(node)),
-    impl_(std::make_unique<CamerasImpl>())
-{
-    // параметры можно сделать настраиваемыми
-    impl_->cap_left.open(0);
-    impl_->cap_right.open(1);
-    impl_->cap_mono.open(2);
+    serial_.open(QIODevice::ReadWrite);
 
-    impl_->cap_left.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-    impl_->cap_left.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
-    impl_->cap_right.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-    impl_->cap_right.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
-    impl_->cap_mono.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-    impl_->cap_mono.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
+    QObject::connect(&serial_, &QSerialPort::readyRead,
+                     this, &Esp32Driver::onSerialReadyRead);
 
-    left_pub_ = node_->create_publisher<sensor_msgs::msg::Image>("/stereo/left/image_raw", 10);
-    right_pub_ = node_->create_publisher<sensor_msgs::msg::Image>("/stereo/right/image_raw", 10);
-    mono_pub_ = node_->create_publisher<sensor_msgs::msg::Image>("/mono/image_raw", 10);
+    // Подписка на команды манипулятора
+    joint_cmd_sub_ = node_->create_subscription<sensor_msgs::msg::JointState>(
+        "/manipulator/joint_commands", 10,
+        [this](sensor_msgs::msg::JointState::SharedPtr msg) {
+            sendJointCommand(*msg);
+        });
 
-    capture_timer_ = node_->create_wall_timer(
-        33ms, std::bind(&Cameras::captureTimerCallback, this));
+    // Паблишер состояний манипулятора (пока заглушка)
+    joint_state_pub_ = node_->create_publisher<sensor_msgs::msg::JointState>(
+        "/manipulator/joint_states", 10);
 }
 
-Cameras::~Cameras() = default;
-
-void Cameras::captureTimerCallback()
+void Esp32Driver::onSerialReadyRead()
 {
-    cv::Mat frame_left, frame_right, frame_mono;
+    QByteArray data = serial_.readAll();
+    if (data.isEmpty())
+        return;
 
-    if (impl_->cap_left.isOpened())  impl_->cap_left.read(frame_left);
-    if (impl_->cap_right.isOpened()) impl_->cap_right.read(frame_right);
-    if (impl_->cap_mono.isOpened())  impl_->cap_mono.read(frame_mono);
+    // TODO: здесь нужно распарсить протокол от ESP32 и опубликовать JointState.
+    // Пока делаем простую заглушку, чтобы линковка и запуск работали.
 
-    auto stamp = node_->now();
+    sensor_msgs::msg::JointState state;
+    state.header.stamp = node_->get_clock()->now();
+    state.name = {"joint1", "joint2", "joint3", "joint4", "joint5"};
+    state.position = {0.0, 0.0, 0.0, 0.0, 0.0};
 
-    if (!frame_left.empty()) {
-        std_msgs::msg::Header header;
-        header.stamp = stamp;
-        header.frame_id = "stereo_left";
-        sensor_msgs::msg::Image::SharedPtr msg =
-            cv_bridge::CvImage(header, "bgr8", frame_left).toImageMsg();
-        left_pub_->publish(*msg);
-    }
-
-    if (!frame_right.empty()) {
-        std_msgs::msg::Header header;
-        header.stamp = stamp;
-        header.frame_id = "stereo_right";
-        sensor_msgs::msg::Image::SharedPtr msg =
-            cv_bridge::CvImage(header, "bgr8", frame_right).toImageMsg();
-        right_pub_->publish(*msg);
-    }
-
-    if (!frame_mono.empty()) {
-        std_msgs::msg::Header header;
-        header.stamp = stamp;
-        header.frame_id = "mono_camera";
-        sensor_msgs::msg::Image::SharedPtr msg =
-            cv_bridge::CvImage(header, "bgr8", frame_mono).toImageMsg();
-        mono_pub_->publish(*msg);
-    }
+    joint_state_pub_->publish(state);
 }
+
+void Esp32Driver::sendJointCommand(const sensor_msgs::msg::JointState &cmd)
+{
+    if (!serial_.isOpen())
+        return;
+
+    if (cmd.position.size() < 5)
+        return;
+
+    // Простейший текстовый протокол: C:p1,p2,p3,p4,p5\n
+    QString out = QString("C:%1,%2,%3,%4,%5\n")
+                      .arg(cmd.position[0], 0, 'f', 3)
+                      .arg(cmd.position[1], 0, 'f', 3)
+                      .arg(cmd.position[2], 0, 'f', 3)
+                      .arg(cmd.position[3], 0, 'f', 3)
+                      .arg(cmd.position[4], 0, 'f', 3);
+
+    serial_.write(out.toUtf8());
+}
+
 
