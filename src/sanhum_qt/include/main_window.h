@@ -20,7 +20,7 @@
 
 #ifdef PLATFORM_WINDOWS
 #include "wifi_server.h"
-#include "gamepad_control.h"
+//#include "gamepad_control.h"
 #else
 #include "robot_client.h"
 #include "motor_driver.h"
@@ -71,7 +71,7 @@ private:
 
 #ifdef PLATFORM_WINDOWS
     WifiServer *wifi_server_{nullptr};
-    GamepadControl *gamepad_{nullptr};
+    //GamepadControl *gamepad_{nullptr};
 #else
     RobotClient *robot_client_{nullptr};
     MotorDriver *motor_driver_{nullptr};
@@ -130,4 +130,5 @@ private:
     double pose_theta_{0.0};
     std::array<double,4> joint_positions_{{0,0,0,0}};
 };
+
 
