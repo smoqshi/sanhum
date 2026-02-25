@@ -7,7 +7,7 @@
 #include <QGroupBox>
 #include <QApplication>
 
-#include <cv_bridge/cv_bridge.h>
+#include <cv_bridge/cv_bridge.hpp>
 #include <opencv2/imgproc.hpp>
 
 using namespace std::chrono_literals;
@@ -419,3 +419,4 @@ void MainWindow::onAutoModeToggled(bool checked)
     msg.data = checked ? "Auto" : "Manual";
     pub->publish(msg);
 }
+
