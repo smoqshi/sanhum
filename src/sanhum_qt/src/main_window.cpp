@@ -355,7 +355,7 @@ void MainWindow::setupRosInterfaces()
 
 #ifdef PLATFORM_WINDOWS
     wifi_server_ = new WifiServer(node_, this);
-    gamepad_ = new GamepadControl(node_, this);
+    //gamepad_ = new GamepadControl(node_, this);
 #else
     robot_client_ = new RobotClient(node_, this);
     motor_driver_ = new MotorDriver(node_);
@@ -419,4 +419,5 @@ void MainWindow::onAutoModeToggled(bool checked)
     msg.data = checked ? "Auto" : "Manual";
     pub->publish(msg);
 }
+
 
