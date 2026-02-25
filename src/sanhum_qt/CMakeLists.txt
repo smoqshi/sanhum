@@ -40,6 +40,7 @@ add_executable(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME} PRIVATE
     include
     ${OpenCV_INCLUDE_DIRS}
+    /opt/ros/jazzy/include
 )
 
 if(WIN32)
@@ -72,3 +73,4 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 ament_package()
+
