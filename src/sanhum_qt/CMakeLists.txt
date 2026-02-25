@@ -4,8 +4,8 @@ project(sanhum_qt LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Qt
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort Gamepad)
+# Qt6
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -21,7 +21,7 @@ find_package(std_msgs REQUIRED)
 find_package(vision_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 
-# OpenCV (для камер и YOLO)
+# OpenCV
 find_package(OpenCV REQUIRED core imgproc dnn highgui)
 
 # Источники и заголовки
@@ -39,7 +39,6 @@ add_executable(${PROJECT_NAME}
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     include
-    ${rclcpp_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
 
@@ -55,8 +54,6 @@ target_link_libraries(${PROJECT_NAME}
     Qt6::Widgets
     Qt6::Network
     Qt6::SerialPort
-    Qt6::Gamepad
-    ${rclcpp_LIBRARIES}
     ${OpenCV_LIBS}
 )
 
