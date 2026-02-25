@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>sanhum_qt</name>
+  <name>sanhum</name>
   <version>0.0.1</version>
   <description>Qt-based ROS2 Jazzy GUI for Sanhum robot (Windows server + Raspberry Pi client)</description>
 
@@ -22,4 +22,5 @@
   <export>
   </export>
 </package>
+
 
