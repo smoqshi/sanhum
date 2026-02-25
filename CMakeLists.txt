@@ -3,12 +3,10 @@ project(sanhum)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
 
 if(UNIX)
-  add_executable(sanhum src/main_pi.cpp)
+  # Pi использует СУЩЕСТВУЮЩИЙ main.cpp
+  add_executable(sanhum src/main.cpp)
 else()
   find_package(Qt6 REQUIRED COMPONENTS Core Widgets SerialPort)
   file(GLOB_RECURSE SOURCES src/*.cpp)
@@ -16,6 +14,6 @@ else()
   target_link_libraries(sanhum Qt6::Core Qt6::Widgets Qt6::SerialPort)
 endif()
 
-ament_target_dependencies(sanhum rclcpp sensor_msgs geometry_msgs std_msgs)
+ament_target_dependencies(sanhum rclcpp)
 install(TARGETS sanhum DESTINATION lib/${PROJECT_NAME})
 ament_package()
