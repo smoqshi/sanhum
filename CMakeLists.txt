@@ -1,89 +1,65 @@
-cmake_minimum_required(VERSION 3.16)
-project(sanhum LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.8)
+project(sanhum)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Определяем платформу
+if(NOT DEFINED PLATFORM_PI)
+  if(UNIX AND NOT APPLE)
+    set(PLATFORM_PI ON)
+  else()
+    set(PLATFORM_PI OFF)
+  endif()
+endif()
 
-# Флаг платформы: Windows = GUI, остальное = робот
-if(WIN32)
-  set(PLATFORM_WINDOWS ON)
+if(PLATFORM_PI)
+  message(STATUS "Building for Raspberry Pi (headless)")
+  add_compile_definitions(PLATFORM_PI)
 else()
-  set(PLATFORM_PI ON)
+  message(STATUS "Building for Desktop (Qt GUI)")
+  find_package(Qt6 REQUIRED COMPONENTS Core Widgets SerialPort)
+  add_compile_definitions(PLATFORM_WINDOWS)
 endif()
 
-# Qt и GUI нужны только на Windows
-if(PLATFORM_WINDOWS)
-  find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
-
-  set(CMAKE_AUTOMOC ON)
-  set(CMAKE_AUTORCC ON)
-  set(CMAKE_AUTOUIC ON)
-endif()
-
-# ROS2
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(vision_msgs REQUIRED)
-find_package(cv_bridge REQUIRED)
 
-# OpenCV
-find_package(OpenCV REQUIRED core imgproc dnn highgui)
-
-# Источники и заголовки
-file(GLOB_RECURSE PROJECT_SOURCES
-    src/*.cpp
-)
-file(GLOB_RECURSE PROJECT_HEADERS
-    include/*.h
+# Источники для Pi (headless)
+set(PI_SOURCES
+  src/main_pi.cpp
 )
 
-add_executable(${PROJECT_NAME}
-    ${PROJECT_SOURCES}
-    ${PROJECT_HEADERS}
+# Источники для Desktop (GUI)  
+set(DESKTOP_SOURCES
+  src/main.cpp
+  src/main_window.cpp
+  src/joystick_widget.cpp
 )
 
-target_include_directories(${PROJECT_NAME} PRIVATE
-    include
-    ${OpenCV_INCLUDE_DIRS}
+# Общие заголовки
+set(COMMON_HEADERS
+  include/motor_driver.h
+  include/esp32_driver.h
+  include/arduino_sensors.h
 )
 
-if(PLATFORM_WINDOWS)
-  target_compile_definitions(${PROJECT_NAME} PRIVATE PLATFORM_WINDOWS)
+if(PLATFORM_PI)
+  # Только Pi версии файлов (без Qt)
+  set(PROJECT_SOURCES ${PI_SOURCES})
 else()
-  target_compile_definitions(${PROJECT_NAME} PRIVATE PLATFORM_PI PLATFORM_LINUX)
+  set(PROJECT_SOURCES ${DESKTOP_SOURCES})
 endif()
 
-if(PLATFORM_WINDOWS)
-  target_link_libraries(${PROJECT_NAME}
-      Qt6::Core
-      Qt6::Gui
-      Qt6::Widgets
-      Qt6::Network
-      Qt6::SerialPort
-      ${OpenCV_LIBS}
-  )
-else()
-  target_link_libraries(${PROJECT_NAME}
-      ${OpenCV_LIBS}
-  )
+add_executable(sanhum ${PROJECT_SOURCES} ${COMMON_HEADERS})
+ament_target_dependencies(sanhum rclcpp sensor_msgs geometry_msgs std_msgs)
+
+if(NOT PLATFORM_PI)
+  target_link_libraries(sanhum Qt6::Core Qt6::Widgets Qt6::SerialPort)
 endif()
 
-ament_target_dependencies(${PROJECT_NAME}
-    rclcpp
-    geometry_msgs
-    nav_msgs
-    sensor_msgs
-    std_msgs
-    vision_msgs
-    cv_bridge
-)
-
-install(TARGETS ${PROJECT_NAME}
-    DESTINATION lib/${PROJECT_NAME}
-)
+install(TARGETS
+  sanhum
+  DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
