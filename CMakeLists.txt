@@ -4,12 +4,21 @@ project(sanhum LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Qt6
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
+# Флаг платформы: Windows = GUI, остальное = робот
+if(WIN32)
+  set(PLATFORM_WINDOWS ON)
+else()
+  set(PLATFORM_PI ON)
+endif()
 
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
+# Qt и GUI нужны только на Windows
+if(PLATFORM_WINDOWS)
+  find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
+
+  set(CMAKE_AUTOMOC ON)
+  set(CMAKE_AUTORCC ON)
+  set(CMAKE_AUTOUIC ON)
+endif()
 
 # ROS2
 find_package(ament_cmake REQUIRED)
@@ -40,23 +49,28 @@ add_executable(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME} PRIVATE
     include
     ${OpenCV_INCLUDE_DIRS}
-    /opt/ros/jazzy/include
 )
 
-if(WIN32)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE PLATFORM_WINDOWS)
+if(PLATFORM_WINDOWS)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE PLATFORM_WINDOWS)
 else()
-    target_compile_definitions(${PROJECT_NAME} PRIVATE PLATFORM_LINUX PLATFORM_PI)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE PLATFORM_PI PLATFORM_LINUX)
 endif()
 
-target_link_libraries(${PROJECT_NAME}
-    Qt6::Core
-    Qt6::Gui
-    Qt6::Widgets
-    Qt6::Network
-    Qt6::SerialPort
-    ${OpenCV_LIBS}
-)
+if(PLATFORM_WINDOWS)
+  target_link_libraries(${PROJECT_NAME}
+      Qt6::Core
+      Qt6::Gui
+      Qt6::Widgets
+      Qt6::Network
+      Qt6::SerialPort
+      ${OpenCV_LIBS}
+  )
+else()
+  target_link_libraries(${PROJECT_NAME}
+      ${OpenCV_LIBS}
+  )
+endif()
 
 ament_target_dependencies(${PROJECT_NAME}
     rclcpp
@@ -73,5 +87,3 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 ament_package()
-
-
