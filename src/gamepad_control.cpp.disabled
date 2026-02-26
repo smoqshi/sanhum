@@ -1,34 +1,63 @@
-#include "gamepad_control.h"
+#pragma once
 
-GamepadControl::GamepadControl(std::shared_ptr<rclcpp::Node> node, QObject *parent)
-    : QObject(parent),
-    node_(std::move(node)),
-    gamepad_(0) // ID геймпада
+#include <QObject>
+#include <QGamepad>
+#include <QGamepadManager>
+
+/**
+ * @brief GamepadControl
+ *
+ * Класс-обёртка над QGamepad/QGamepadManager, который:
+ *  - выбирает первый доступный геймпад;
+ *  - конвертирует его оси/кнопки в абстрактное состояние управления:
+ *      * drive_v, drive_w         (движение гусеничного шасси)
+ *      * manip_extend, manip_height (манипулятор)
+ *      * grip_closed              (состояние захвата)
+ *  - дублирует события в виде сигналов, чтобы MainWindow мог их слушать.
+ */
+class GamepadControl : public QObject
 {
-    cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+    Q_OBJECT
+public:
+    struct State {
+        double drive_v = 0.0;        // -1..1, линейная скорость (левый стик Y)
+        double drive_w = 0.0;        // -1..1, поворот (правый стик X)
+        double manip_extend = 0.0;   // -1..1, удлинение (правый стик Y)
+        double manip_height = 0.0;   // -1..1, высота (LT / LT+LB)
+        bool   grip_closed = false;  // RT/RT+RB
+    };
 
-    connect(&gamepad_, &QGamepad::axisLeftXChanged,
-            this, &GamepadControl::onAxisLeftXChanged);
-    connect(&gamepad_, &QGamepad::axisLeftYChanged,
-            this, &GamepadControl::onAxisLeftYChanged);
-}
+    explicit GamepadControl(QObject *parent = nullptr);
+    ~GamepadControl() override;
 
-void GamepadControl::onAxisLeftXChanged(double value)
-{
-    axis_x_ = value;
-    publishCmdVel();
-}
+    State state() const { return state_; }
 
-void GamepadControl::onAxisLeftYChanged(double value)
-{
-    axis_y_ = value;
-    publishCmdVel();
-}
+signals:
+    void stateChanged(const GamepadControl::State &state);
+    void gamepadConnected(int deviceId);
+    void gamepadDisconnected(int deviceId);
 
-void GamepadControl::publishCmdVel()
-{
-    geometry_msgs::msg::Twist msg;
-    msg.linear.x  = -axis_y_;
-    msg.angular.z = axis_x_;
-    cmd_vel_pub_->publish(msg);
-}
+private slots:
+    void onConnectedGamepadsChanged();
+    void onAxisLeftXChanged(double value);
+    void onAxisLeftYChanged(double value);
+    void onAxisRightXChanged(double value);
+    void onAxisRightYChanged(double value);
+    void onButtonL2Changed(double value);
+    void onButtonR2Changed(double value);
+    void onButtonL1Changed(bool pressed);
+    void onButtonR1Changed(bool pressed);
+
+private:
+    void attachToFirstGamepad();
+    void emitStateChanged();
+
+    QGamepad *gamepad_;
+    State state_;
+
+    // внутренние флаги для комбинаций LT+LB, RT+RB
+    double lt_value_;
+    double rt_value_;
+    bool lb_pressed_;
+    bool rb_pressed_;
+};
