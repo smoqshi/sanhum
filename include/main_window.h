@@ -1,134 +1,82 @@
-#pragma once
+#ifndef MAIN_WINDOW_H
+#define MAIN_WINDOW_H
 
 #include <QMainWindow>
-#include <QTimer>
-#include <QLabel>
-#include <QSlider>
 #include <QPushButton>
-#include <QTabWidget>
-#include <QPlainTextEdit>
-#include <QComboBox>
-#include <array>
+#include <QTimer>
+#include <QTcpSocket>
 #include <memory>
+#include <array>
 
 #include <rclcpp/rclcpp.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
-#include <nav_msgs/msg/odometry.hpp>
-#include <sensor_msgs/msg/image.hpp>
-#include <std_msgs/msg/string.hpp>
 
-#ifdef PLATFORM_WINDOWS
-#include "wifi_server.h"
-//#include "gamepad_control.h"
-#else
-#include "robot_client.h"
-#include "motor_driver.h"
-#include "esp32_driver.h"
-#include "arduino_sensors.h"
-#include "cameras.h"
-#include "yolo_detector.h"
-#endif
-
-class JoystickWidget;
 class RobotViewWidget;
+class JoystickWidget;
+
+// Абстрактное состояние управления от геймпада/клавиатуры
+struct ControlState
+{
+    double drive_v;        // -1..1, движение вперёд/назад (левый стик Y / W,S)
+    double drive_w;        // -1..1, поворот (правый стик X / A,D)
+    double manip_extend;   // -1..1, удлинение манипулятора (правый стик Y / I,K)
+    double manip_height;   // -1..1, высота манипулятора (LT / LT+LB / U,J)
+    bool   grip_closed;    // захват закрыт (RT / O)
+};
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+
 public:
-    explicit MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent = nullptr);
-    ~MainWindow();
+    explicit MainWindow(std::shared_ptr<rclcpp::Node> node,
+                        QWidget *parent = nullptr);
+
+    // Задать IP Raspberry Pi; пустая строка -> чистая симуляция
+    void setRobotHost(const QString &ip);
+
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
 
 private slots:
-    void updateDiagnostics();
-    void updateVideoFrames();
-
-    void onTransSensitivityChanged(int value);
-    void onRotSensitivityChanged(int value);
-    void onAutoModeToggled(bool checked);
+    void onSimUpdate();
+    void onResetPose();
+    void onRobotConnected();
+    void onRobotDisconnected();
 
 private:
-    void setupUi();
-    QWidget* createMainTab();
-    QWidget* createDiagnosticsTab();
-    QWidget* createManipulatorTab();
+    void sendDriveAndManipulatorCommand(double u_L, double u_R);
+    void updateManipulatorModel(double dt);
 
-    void setupRosInterfaces();
-    void setupTimers();
-
-    std::shared_ptr<rclcpp::Node> node_;
-
+private:
     // ROS2
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr diag_sub_;
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr cam_left_sub_;
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr cam_right_sub_;
-    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr cam_mono_sub_;
-    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr pi_stats_sub_;
+    std::shared_ptr<rclcpp::Node> ros_node_;
 
-#ifdef PLATFORM_WINDOWS
-    WifiServer *wifi_server_{nullptr};
-    //GamepadControl *gamepad_{nullptr};
-#else
-    RobotClient *robot_client_{nullptr};
-    MotorDriver *motor_driver_{nullptr};
-    Esp32Driver *esp32_driver_{nullptr};
-    ArduinoSensors *arduino_sensors_{nullptr};
-    Cameras *cameras_{nullptr};
-    YoloDetector *yolo_{nullptr};
-#endif
+    // Виджеты
+    RobotViewWidget *robot_view_;
+    JoystickWidget  *joystick_drive_;
+    JoystickWidget  *joystick_manip_;
+    QPushButton     *reset_button_;
 
-    QTabWidget *tabs_{nullptr};
+    // Сетевое соединение с Raspberry Pi
+    QTcpSocket *robot_socket_;
+    bool        robot_connected_;
+    QString     robot_host_;
 
-    // Главная вкладка
-    JoystickWidget *left_joy_{nullptr};
-    JoystickWidget *right_joy_{nullptr};
+    // Таймер симуляции
+    QTimer *sim_timer_;
+    int     sim_dt_ms_;
 
-    QSlider *trans_sens_slider_{nullptr};
-    QSlider *rot_sens_slider_{nullptr};
-    QLabel  *trans_sens_label_{nullptr};
-    QLabel  *rot_sens_label_{nullptr};
+    // Состояние симуляции гусеничного шасси
+    double sim_x_;      // м
+    double sim_y_;      // м
+    double sim_theta_;  // рад
 
-    QLabel *cam_left_view_{nullptr};
-    QLabel *cam_right_view_{nullptr};
-    QLabel *cam_mono_view_{nullptr};
+    // Состояние манипулятора (4 звена)
+    std::array<double, 4> joints_;
 
-    RobotViewWidget *robot_view_{nullptr};
-
-    QPushButton *auto_mode_button_{nullptr};
-    QLabel *auto_mode_status_{nullptr};
-
-    QPushButton *hint_forward_{nullptr};
-    QPushButton *hint_back_{nullptr};
-    QPushButton *hint_left_{nullptr};
-    QPushButton *hint_right_{nullptr};
-    QPushButton *hint_rotate_left_{nullptr};
-    QPushButton *hint_rotate_right_{nullptr};
-
-    QPlainTextEdit *pi_stats_text_{nullptr};
-
-    // Диагностика/манипулятор (простые элементы)
-    QLabel *odom_label_{nullptr};
-    QPlainTextEdit *diag_text_{nullptr};
-    QLabel *joint_state_label_{nullptr};
-
-    QTimer diagnostics_timer_;
-    QTimer video_timer_;
-
-    QImage last_left_frame_;
-    QImage last_right_frame_;
-    QImage last_mono_frame_;
-
-    double trans_sensitivity_{1.0};
-    double rot_sensitivity_{1.0};
-
-    double pose_x_{0.0};
-    double pose_y_{0.0};
-    double pose_theta_{0.0};
-    std::array<double,4> joint_positions_{{0,0,0,0}};
+    // Абстрактное состояние управления (геймпад + клавиатура)
+    ControlState control_;
 };
 
-
+#endif // MAIN_WINDOW_H
