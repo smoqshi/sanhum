@@ -40,6 +40,9 @@ public:
     explicit MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent = nullptr);
     ~MainWindow();
 
+    // Для авторизации по ROS2 namespace
+    void setRobotNamespace(const QString &ns);
+
 private slots:
     void updateDiagnostics();
     void updateVideoFrames();
@@ -74,6 +77,7 @@ private:
     std::shared_ptr<rclcpp::Node> node_;
 
     // ROS2
+    QString robot_namespace_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr diag_sub_;
@@ -124,7 +128,7 @@ private:
 
     QPlainTextEdit *pi_stats_text_{nullptr};
 
-    // Диагностика/манипулятор (простые элементы)
+    // Диагностика/манипулятор
     QLabel *odom_label_{nullptr};
     QPlainTextEdit *diag_text_{nullptr};
     QLabel *joint_state_label_{nullptr};
