@@ -1,6 +1,8 @@
 #include "main_window.h"
+
 #include "robot_view_widget.h"
 #include "joystick_widget.h"
+#include "gamepad_control.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -10,15 +12,22 @@
 #include <QDebug>
 #include <QtMath>
 
+// Конструктор
 MainWindow::MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent)
     : QMainWindow(parent)
     , ros_node_(std::move(node))
+    , robot_view_(nullptr)
+    , joystick_drive_(nullptr)
+    , joystick_manip_(nullptr)
+    , reset_button_(nullptr)
     , robot_socket_(new QTcpSocket(this))
     , robot_connected_(false)
     , sim_x_(0.0)
     , sim_y_(0.0)
     , sim_theta_(0.0)
     , sim_dt_ms_(20)
+    , sim_timer_(new QTimer(this))
+    , gamepad_(nullptr)
 {
     // Центральный виджет и лэйаут
     QWidget *central = new QWidget(this);
@@ -34,11 +43,11 @@ MainWindow::MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent)
     QVBoxLayout *sideLayout = new QVBoxLayout();
 
     joystick_drive_ = new JoystickWidget(this);   // левый стик: движение
-    joystick_drive_->setLabel(tr("Ходовая (левый стик)"));
+    joystick_drive_->setLabel(tr("Ходовая (левый стик / WASD)"));
     sideLayout->addWidget(joystick_drive_);
 
     joystick_manip_ = new JoystickWidget(this);   // правый стик: манипулятор
-    joystick_manip_->setLabel(tr("Манипулятор (правый стик)"));
+    joystick_manip_->setLabel(tr("Манипулятор (правый стик / IJKUO)"));
     sideLayout->addWidget(joystick_manip_);
 
     reset_button_ = new QPushButton(tr("Сброс положения"), this);
@@ -48,19 +57,19 @@ MainWindow::MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent)
     mainLayout->addLayout(sideLayout, /*stretch*/ 1);
 
     // Таймер симуляции
-    sim_timer_ = new QTimer(this);
     sim_timer_->setInterval(sim_dt_ms_);
     connect(sim_timer_, &QTimer::timeout, this, &MainWindow::onSimUpdate);
     sim_timer_->start();
 
-    // Сигналы/слоты
-    connect(reset_button_, &QPushButton::clicked,
-            this, &MainWindow::onResetPose);
-
+    // Сигналы/слоты для TCP‑подключения к роботу
     connect(robot_socket_, &QTcpSocket::connected,
             this, &MainWindow::onRobotConnected);
     connect(robot_socket_, &QTcpSocket::disconnected,
             this, &MainWindow::onRobotDisconnected);
+
+    // Кнопка сброса положения
+    connect(reset_button_, &QPushButton::clicked,
+            this, &MainWindow::onResetPose);
 
     // Инициализируем виртуальное состояние управления
     control_.drive_v = 0.0;
@@ -69,20 +78,35 @@ MainWindow::MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent)
     control_.manip_height = 0.0;
     control_.grip_closed = false;
 
-    // Из коробки считаем, что робот не подключен => работаем в симуляции
+    joints_.fill(0.0);
+
+    // Инициализация геймпада
+    gamepad_ = new GamepadControl(this);
+    connect(gamepad_, &GamepadControl::stateChanged,
+            this, [this](const GamepadControl::State &st) {
+                control_.drive_v      = st.drive_v;
+                control_.drive_w      = st.drive_w;
+                control_.manip_extend = st.manip_extend;
+                control_.manip_height = st.manip_height;
+                control_.grip_closed  = st.grip_closed;
+
+                // Обновляем визуализацию джойстиков
+                joystick_drive_->setAxes(control_.drive_w, control_.drive_v);
+                joystick_manip_->setAxes(control_.drive_w, control_.manip_extend);
+            });
+
     setFocusPolicy(Qt::StrongFocus);
 }
 
+// Установка адреса робота и попытка подключения
 void MainWindow::setRobotHost(const QString &ip)
 {
     robot_host_ = ip;
     if (!robot_host_.isEmpty()) {
-        // Пробуем подключиться к роботу по TCP (локальный протокол)
-        // Например, порт 5555
         robot_socket_->abort();
+        // Простой локальный TCP‑протокол, порт 5555
         robot_socket_->connectToHost(robot_host_, 5555);
     } else {
-        // Нет IP — чистая симуляция
         robot_socket_->abort();
         robot_connected_ = false;
     }
@@ -100,6 +124,7 @@ void MainWindow::onRobotDisconnected()
     qDebug() << "Disconnected from robot";
 }
 
+// Сброс позы робота в симуляции
 void MainWindow::onResetPose()
 {
     sim_x_ = 0.0;
@@ -108,27 +133,25 @@ void MainWindow::onResetPose()
     robot_view_->setPose(sim_x_, sim_y_, sim_theta_);
 }
 
-// Обновление симуляции: одометрия гусеничного робота + передача команд на робота
+// Обновление симуляции и отправка команд роботу
 void MainWindow::onSimUpdate()
 {
     const double dt = sim_dt_ms_ / 1000.0;
 
     // Преобразуем абстрактные команды в нормализованные PWM гусениц
-    double u_v = control_.drive_v;   // -1..1
-    double u_w = control_.drive_w;   // -1..1
+    double u_v = control_.drive_v;   // -1..1, вперёд/назад
+    double u_w = control_.drive_w;   // -1..1, поворот
 
     double u_L = qBound(-1.0, u_v - u_w, 1.0);
     double u_R = qBound(-1.0, u_v + u_w, 1.0);
 
-    // Обновляем виджет джойстика
+    // Обновляем виджет джойстика для ходовой
     joystick_drive_->setAxes(u_w, u_v); // X=turn, Y=forward
 
-    // Параметры шасси (гусеничный, как дифф-робот)
+    // Параметры шасси (гусеничный, как дифф‑робот)
     const double b = 0.235;      // расстояние между центрами гусениц, м
-    const double v_max = 0.5;    // м/с (примерно, подстроишь по факту)
-    const double w_max = 1.5;    // рад/с
+    const double v_max = 0.5;    // м/с (пример, подстрой по факту)
 
-    // Нормализованные PWM -> линейные скорости
     double v_L = u_L * v_max;
     double v_R = u_R * v_max;
 
@@ -144,7 +167,7 @@ void MainWindow::onSimUpdate()
     robot_view_->setPose(sim_x_, sim_y_, sim_theta_);
     robot_view_->setTrackSpeeds(v_L, v_R);
 
-    // Обновляем простую модель манипулятора
+    // Обновление модели манипулятора
     updateManipulatorModel(dt);
 
     // Если робот подключен — отправляем команды по TCP
@@ -153,22 +176,19 @@ void MainWindow::onSimUpdate()
     }
 }
 
-// Простая динамика управления манипулятором из control_
+// Простая «динамика» манипулятора по осям управления
 void MainWindow::updateManipulatorModel(double dt)
 {
-    // Упрощённо: 4 угла манипулятора изменяются пропорционально осям управления
-    // control_.manip_extend -> "выдвижение"
-    // control_.manip_height -> "подъём/опускание"
     const double speed_extend = 0.5; // рад/с эквивалент
     const double speed_height = 0.5; // рад/с
 
-    // joints_: [0..3]
+    // Условное распределение влияния управляющих сигналов
     joints_[0] += control_.manip_extend * speed_extend * dt;
     joints_[1] += control_.manip_height * speed_height * dt;
     joints_[2] += control_.manip_extend * speed_extend * dt * 0.5;
     joints_[3] += control_.manip_height * speed_height * dt * 0.5;
 
-    // Для наглядности можно ограничить диапазоны
+    // Ограничения диапазонов
     for (double &j : joints_) {
         j = qBound(-M_PI, j, M_PI);
     }
@@ -177,14 +197,13 @@ void MainWindow::updateManipulatorModel(double dt)
     robot_view_->setGripperClosed(control_.grip_closed);
 }
 
-// Простейший текстовый протокол: одна строка с командами
+// Простейший текстовый протокол для Raspberry Pi
 void MainWindow::sendDriveAndManipulatorCommand(double u_L, double u_R)
 {
     if (!robot_connected_) return;
     if (robot_socket_->state() != QAbstractSocket::ConnectedState) return;
 
-    // Сформируем строку, которую будет парсить Raspberry Pi
-    // DRIVE L=<float> R=<float> J1=<float> ... J4=<float> GRIP=<0|1>\n
+    // DRIVE L=<float> R=<float> J1=<float> J2=<float> J3=<float> J4=<float> GRIP=<0|1>\n
     QString cmd = QString("DRIVE L=%1 R=%2 J1=%3 J2=%4 J3=%5 J4=%6 GRIP=%7\n")
                       .arg(u_L, 0, 'f', 3)
                       .arg(u_R, 0, 'f', 3)
@@ -198,7 +217,7 @@ void MainWindow::sendDriveAndManipulatorCommand(double u_L, double u_R)
     robot_socket_->flush();
 }
 
-// Обработка клавиатуры: дублирование управления
+// Обработка нажатий клавиш — дублируют управление геймпада
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
     if (event->isAutoRepeat()) {
@@ -232,6 +251,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
     QMainWindow::keyPressEvent(event);
 }
 
+// Сброс значений при отпускании клавиш
 void MainWindow::keyReleaseEvent(QKeyEvent *event)
 {
     if (event->isAutoRepeat()) {
