@@ -41,7 +41,6 @@ MainWindow::MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent)
             });
 #endif
 
-    // Начальное состояние симуляции
     control_ = {};
     sim_x_ = 0.0;
     sim_y_ = 0.0;
@@ -49,6 +48,20 @@ MainWindow::MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent)
 }
 
 MainWindow::~MainWindow() = default;
+
+void MainWindow::setRobotNamespace(const QString &ns)
+{
+    robot_namespace_ = ns;
+
+    // Переинициализируем publisher cmd_vel с учётом namespace
+    std::string topic;
+    if (!robot_namespace_.isEmpty()) {
+        topic = robot_namespace_.toStdString() + "/cmd_vel";
+    } else {
+        topic = "/cmd_vel";
+    }
+    cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>(topic, 10);
+}
 
 void MainWindow::setupUi()
 {
@@ -66,7 +79,6 @@ void MainWindow::setupUi()
     resize(1200, 750);
     setWindowTitle("Sanhum Robot Control");
 
-    // Тёмная минималистичная тема
     QString style = R"(
         QMainWindow {
             background-color: #151515;
@@ -255,7 +267,6 @@ QWidget* MainWindow::createMainTab()
     connect(hint_left_,    &QPushButton::clicked, [this]() { right_joy_->setFocus(); });
     connect(hint_right_,   &QPushButton::clicked, [this]() { right_joy_->setFocus(); });
 
-    // Управление с мыши через джойстики остаётся, но теперь это просто ещё один источник команд
     connect(left_joy_, &JoystickWidget::positionChanged,
             this, [this](double x, double y) {
                 Q_UNUSED(x);
@@ -300,8 +311,8 @@ QWidget* MainWindow::createManipulatorTab()
 
 void MainWindow::setupRosInterfaces()
 {
-    cmd_vel_pub_ = node_->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
-
+    // cmd_vel_pub_ инициализируется в setRobotNamespace
+    // здесь оставляем только подписки
     odom_sub_ = node_->create_subscription<nav_msgs::msg::Odometry>(
         "/odom", 10,
         [this](nav_msgs::msg::Odometry::SharedPtr msg) {
@@ -463,16 +474,14 @@ void MainWindow::onSimUpdate()
 {
     const double dt = sim_dt_ms_ / 1000.0;
 
-    // Нормализованные команды
-    double u_v = control_.drive_v;                // из геймпада/джойстика/клавы
+    double u_v = control_.drive_v;
     double u_w = control_.drive_w;
 
     double u_L = std::clamp(u_v - u_w, -1.0, 1.0);
     double u_R = std::clamp(u_v + u_w, -1.0, 1.0);
 
-    // Геометрия гусениц
-    const double b = 0.235;   // м (расстояние между центрами гусениц)
-    const double v_max = 0.5; // м/с
+    const double b = 0.235;
+    const double v_max = 0.5;
 
     double v_L = u_L * v_max;
     double v_R = u_R * v_max;
@@ -480,7 +489,6 @@ void MainWindow::onSimUpdate()
     double v = 0.5 * (v_L + v_R);
     double w = (v_R - v_L) / b;
 
-    // Одометрия симуляции (параллельно реальному одометру)
     sim_x_ += v * std::cos(sim_theta_) * dt;
     sim_y_ += v * std::sin(sim_theta_) * dt;
     sim_theta_ += w * dt;
@@ -488,10 +496,7 @@ void MainWindow::onSimUpdate()
     robot_view_->setPose(sim_x_, sim_y_, sim_theta_);
     robot_view_->setTrackSpeeds(v_L, v_R);
 
-    // Манипулятор (упрощённая модель для визуализации)
     updateManipulatorModel(dt);
-
-    // Публикация в ROS2 (реальный робот)
     publishRosCommands(u_L, u_R);
 }
 
@@ -537,4 +542,3 @@ void MainWindow::publishRosCommands(double u_L, double u_R)
 
     cmd_vel_pub_->publish(msg);
 }
-
