@@ -1,63 +1,62 @@
 #pragma once
 
 #include <QObject>
-#include <QGamepad>
-#include <QGamepadManager>
+#include <QTimer>
 
 /**
  * @brief GamepadControl
  *
- * Класс-обёртка над QGamepad/QGamepadManager, который:
- *  - выбирает первый доступный геймпад;
- *  - конвертирует его оси/кнопки в абстрактное состояние управления:
- *      * drive_v, drive_w         (движение гусеничного шасси)
- *      * manip_extend, manip_height (манипулятор)
- *      * grip_closed              (состояние захвата)
- *  - дублирует события в виде сигналов, чтобы MainWindow мог их слушать.
+ * Реализация поддержки геймпада на Windows через XInput.
+ * Периодически опрашивает XInput, собирает:
+ *  - drive_v, drive_w         (ходовая: левый Y, правый X)
+ *  - manip_extend, manip_height
+ *  - grip_closed
+ *
+ * Модель:
+ *  - левый стик (Y)       -> drive_v
+ *  - правый стик (X)      -> drive_w
+ *  - правый стик (Y)      -> manip_extend
+ *  - LT (+LB)             -> manip_height
+ *  - RT (+RB)             -> grip_closed
  */
 class GamepadControl : public QObject
 {
     Q_OBJECT
 public:
     struct State {
-        double drive_v = 0.0;        // -1..1, линейная скорость (левый стик Y)
-        double drive_w = 0.0;        // -1..1, поворот (правый стик X)
-        double manip_extend = 0.0;   // -1..1, удлинение (правый стик Y)
-        double manip_height = 0.0;   // -1..1, высота (LT / LT+LB)
-        bool   grip_closed = false;  // RT/RT+RB
+        double drive_v = 0.0;        // -1..1, линейная скорость
+        double drive_w = 0.0;        // -1..1, поворот
+        double manip_extend = 0.0;   // -1..1, удлинение манипулятора
+        double manip_height = 0.0;   // -1..1, высота манипулятора
+        bool   grip_closed = false;  // состояние захвата
     };
 
     explicit GamepadControl(QObject *parent = nullptr);
-    ~GamepadControl() override;
+    ~GamepadControl() override = default;
 
     State state() const { return state_; }
 
 signals:
     void stateChanged(const GamepadControl::State &state);
-    void gamepadConnected(int deviceId);
-    void gamepadDisconnected(int deviceId);
+    void gamepadConnected(int index);
+    void gamepadDisconnected(int index);
 
 private slots:
-    void onConnectedGamepadsChanged();
-    void onAxisLeftXChanged(double value);
-    void onAxisLeftYChanged(double value);
-    void onAxisRightXChanged(double value);
-    void onAxisRightYChanged(double value);
-    void onButtonL2Changed(double value);
-    void onButtonR2Changed(double value);
-    void onButtonL1Changed(bool pressed);
-    void onButtonR1Changed(bool pressed);
+    void pollGamepad();
 
 private:
-    void attachToFirstGamepad();
+    bool updateStateFromXInput();
     void emitStateChanged();
 
-    QGamepad *gamepad_;
+    QTimer poll_timer_;
     State state_;
 
-    // внутренние флаги для комбинаций LT+LB, RT+RB
+    bool last_connected_;
+    int  connected_index_;
+
+    // Внутренние флаги для комбинаций LT+LB, RT+RB
     double lt_value_;
     double rt_value_;
-    bool lb_pressed_;
-    bool rb_pressed_;
+    bool   lb_pressed_;
+    bool   rb_pressed_;
 };
