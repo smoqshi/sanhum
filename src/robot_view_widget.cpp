@@ -4,8 +4,16 @@
 
 RobotViewWidget::RobotViewWidget(QWidget *parent)
     : QWidget(parent)
+    , x_(0.0)
+    , y_(0.0)
+    , theta_(0.0)
+    , left_speed_(0.0)
+    , right_speed_(0.0)
+    , gripper_closed_(false)
 {
     setMinimumSize(300, 300);
+
+    joints_.fill(0.0);
 }
 
 void RobotViewWidget::setPose(double x, double y, double theta)
@@ -16,7 +24,7 @@ void RobotViewWidget::setPose(double x, double y, double theta)
     update();
 }
 
-void RobotViewWidget::setJointPositions(const std::array<double,4> &joints)
+void RobotViewWidget::setJointPositions(const std::array<double, 4> &joints)
 {
     joints_ = joints;
     update();
@@ -29,52 +37,159 @@ void RobotViewWidget::setTrackSpeeds(double left_speed, double right_speed)
     update();
 }
 
+void RobotViewWidget::setGripperClosed(bool closed)
+{
+    gripper_closed_ = closed;
+    update();
+}
+
 void RobotViewWidget::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    p.fillRect(rect(), Qt::black);
+    // Заливаем фоном (не чёрный прямоугольник, а светлый фон)
+    p.fillRect(rect(), QColor(30, 30, 30));
 
-    QPoint center(width()/2, height()/2);
+    // Рисуем круговую арену
+    QPoint center(width() / 2, height() / 2);
+    int radius = qMin(width(), height()) / 2 - 10;
 
+    p.setPen(QPen(Qt::gray, 2));
+    p.setBrush(QColor(10, 10, 10));
+    p.drawEllipse(center, radius, radius);
+
+    // Переходим в систему координат арены
     p.translate(center);
+
+    // Масштаб: приведём миллиметры к пикселям
+    // Берём масштаб так, чтобы робот хорошо помещался в круг
+    // Робот: ширина 280 мм, длина 370 мм
+    double robot_width_mm = 280.0;
+    double robot_length_mm = 370.0;
+    double scale = (radius * 0.6) / (robot_length_mm / 2.0); // длина по вертикали
+
+    // Одометрическое смещение по x_, y_ (в метрах) -> мм -> пиксели
+    double x_mm = x_ * 1000.0;
+    double y_mm = y_ * 1000.0;
+
+    p.translate(x_mm * scale / 1000.0, -y_mm * scale / 1000.0);
     p.rotate(theta_ * 180.0 / M_PI);
 
-    int body_w = 120;
-    int body_h = 180;
+    // Рисуем корпус робота (мнимое 3D сверху)
+    drawTrackedBase(p, scale);
+    drawManipulator(p, scale);
+}
 
-    // корпус
-    p.setBrush(QColor(60,60,60));
+void RobotViewWidget::drawTrackedBase(QPainter &p, double scale)
+{
+    // Основной корпус как прямоугольник 280x370 мм
+    double body_w_mm = 280.0;
+    double body_l_mm = 370.0;
+
+    double body_w = body_w_mm * scale / 1000.0;
+    double body_l = body_l_mm * scale / 1000.0;
+
+    QRectF bodyRect(-body_w / 2.0, -body_l / 2.0, body_w, body_l);
+
+    // Псевдо-3D: верх корпуса чуть уже
+    p.save();
     p.setPen(Qt::NoPen);
-    p.drawRect(-body_w/2, -body_h/2, body_w, body_h);
+    p.setBrush(QColor(60, 60, 60));
 
-    // гусеницы
-    QColor left_color  = (left_speed_  > 0.01) ? Qt::green :
-                            (left_speed_  < -0.01) ? Qt::red : Qt::darkGray;
+    p.drawRect(bodyRect);
+
+    // Передняя сторона (по -Y) подчеркнута цветом
+    p.setBrush(QColor(90, 90, 90));
+    QRectF frontRect(-body_w / 2.0, -body_l / 2.0, body_w, body_l * 0.15);
+    p.drawRect(frontRect);
+
+    // Квадраты в передних углах 70x70 мм
+    double sq_mm = 70.0;
+    double sq = sq_mm * scale / 1000.0;
+    p.setBrush(QColor(120, 80, 80));
+
+    QRectF frontLeft(-body_w / 2.0, -body_l / 2.0, sq, sq);
+    QRectF frontRight(body_w / 2.0 - sq, -body_l / 2.0, sq, sq);
+    p.drawRect(frontLeft);
+    p.drawRect(frontRight);
+
+    // Гусеницы: ширина 50 мм, расстояние между ними 185 мм
+    double track_w_mm = 50.0;
+    double track_gap_mm = 185.0;
+
+    double track_w = track_w_mm * scale / 1000.0;
+    double track_gap = track_gap_mm * scale / 1000.0;
+
+    double tracks_total_w = track_gap + 2.0 * track_w;
+
+    double left_x = -tracks_total_w / 2.0;
+    double right_x = tracks_total_w / 2.0 - track_w;
+
+    QColor left_color = (left_speed_ > 0.01) ? Qt::green :
+                        (left_speed_ < -0.01) ? Qt::red : Qt::darkGray;
     QColor right_color = (right_speed_ > 0.01) ? Qt::green :
-                             (right_speed_ < -0.01) ? Qt::red : Qt::darkGray;
+                         (right_speed_ < -0.01) ? Qt::red : Qt::darkGray;
 
     p.setBrush(left_color);
-    p.drawRect(-body_w/2 - 20, -body_h/2, 20, body_h);
+    p.drawRect(QRectF(left_x, -body_l / 2.0, track_w, body_l));
 
     p.setBrush(right_color);
-    p.drawRect(body_w/2, -body_h/2, 20, body_h);
+    p.drawRect(QRectF(right_x, -body_l / 2.0, track_w, body_l));
 
-    // манипулятор (простая кинематика сверху)
-    p.setPen(QPen(Qt::yellow, 4));
-    QPointF base(0, -body_h/2);
-    double len1 = 50, len2 = 40, len3 = 30, len4 = 20;
-    double a1 = joints_[0], a2 = joints_[1], a3 = joints_[2], a4 = joints_[3];
+    p.restore();
+}
 
-    QPointF j1(base.x() + len1 * std::cos(a1), base.y() - len1 * std::sin(a1));
-    QPointF j2(j1.x() + len2 * std::cos(a1+a2), j1.y() - len2 * std::sin(a1+a2));
-    QPointF j3(j2.x() + len3 * std::cos(a1+a2+a3), j2.y() - len3 * std::sin(a1+a2+a3));
-    QPointF j4(j3.x() + len4 * std::cos(a1+a2+a3+a4), j3.y() - len4 * std::sin(a1+a2+a3+a4));
+void RobotViewWidget::drawManipulator(QPainter &p, double scale)
+{
+    // База манипулятора в передней части корпуса
+    // Используем те же размеры корпуса
+    double body_l_mm = 370.0;
+    double body_l = body_l_mm * scale / 1000.0;
+
+    QPointF base(0.0, -body_l / 2.0);
+
+    p.save();
+    p.setPen(QPen(Qt::yellow, 3));
+
+    // Условные длины звеньев, мм
+    double len1_mm = 100.0;
+    double len2_mm = 100.0;
+    double len3_mm = 80.0;
+    double len4_mm = 60.0;
+
+    double len1 = len1_mm * scale / 1000.0;
+    double len2 = len2_mm * scale / 1000.0;
+    double len3 = len3_mm * scale / 1000.0;
+    double len4 = len4_mm * scale / 1000.0;
+
+    double a1 = joints_[0];
+    double a2 = joints_[1];
+    double a3 = joints_[2];
+    double a4 = joints_[3];
+
+    QPointF j1(base.x() + len1 * std::cos(a1),
+               base.y() - len1 * std::sin(a1));
+    QPointF j2(j1.x() + len2 * std::cos(a1 + a2),
+               j1.y() - len2 * std::sin(a1 + a2));
+    QPointF j3(j2.x() + len3 * std::cos(a1 + a2 + a3),
+               j2.y() - len3 * std::sin(a1 + a2 + a3));
+    QPointF j4(j3.x() + len4 * std::cos(a1 + a2 + a3 + a4),
+               j3.y() - len4 * std::sin(a1 + a2 + a3 + a4));
 
     p.drawLine(base, j1);
     p.drawLine(j1, j2);
     p.drawLine(j2, j3);
     p.drawLine(j3, j4);
+
+    // Захват
+    p.setPen(QPen(gripper_closed_ ? Qt::red : Qt::green, 3));
+    double grip_size = 10.0;
+    QPointF g1(j4.x() - grip_size, j4.y());
+    QPointF g2(j4.x() + grip_size, j4.y());
+    p.drawLine(g1, j4);
+    p.drawLine(j4, g2);
+
+    p.restore();
 }
