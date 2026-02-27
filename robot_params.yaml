@@ -1,0 +1,23 @@
+robot:
+  base_width_mm: 500.0          # ширина корпуса
+  base_length_mm: 600.0         # длина
+  base_height_mm: 300.0         # высота
+  track_gauge_mm: 350.0         # расстояние между гусеницами
+  wheel_diameter_mm: 80.0       # эффективный диаметр ведущего колеса гусеницы
+
+manipulator:
+  link1_length_mm: 150.0
+  link2_length_mm: 130.0
+  link3_length_mm: 120.0
+  link4_length_mm: 100.0
+  gripper_width_mm: 80.0
+
+cameras:
+  stereo_baseline_mm: 120.0
+  stereo_fov_deg: 70.0
+  mono_fov_deg: 80.0
+
+behaviors:
+  avoid_distance_mm: 300.0
+  follow_distance_mm: 800.0
+  obstacle_stop_mm: 200.0

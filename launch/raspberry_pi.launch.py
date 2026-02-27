@@ -13,7 +13,7 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='sanhum',
-            executable='sanhum',
+            executable='sanhum_robot',
             name='sanhum_robot_node',
             parameters=[config],
             output='screen'
