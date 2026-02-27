@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QGroupBox>
 #include <QApplication>
+#include <QGridLayout>
 
 #include <cv_bridge/cv_bridge.hpp>
 #include <opencv2/imgproc.hpp>
@@ -33,10 +34,10 @@ MainWindow::MainWindow(std::shared_ptr<rclcpp::Node> node, QWidget *parent)
 
                 // Отображаем состояние стиков на джойстиках
                 if (left_joy_) {
-                    left_joy_->setAxes(0.0, control_.drive_v);
+                    left_joy_->setAxes(control_.drive_w, control_.drive_v);
                 }
                 if (right_joy_) {
-                    right_joy_->setAxes(control_.drive_w, control_.manip_extend);
+                    right_joy_->setAxes(control_.manip_extend, control_.manip_height);
                 }
             });
 #endif
@@ -170,19 +171,11 @@ QWidget* MainWindow::createMainTab()
 
     main_layout->addLayout(sens_layout);
 
-    // Средний блок: левый джойстик, камеры+робот, правый джойстик
-    auto *middle_layout = new QHBoxLayout();
-
-    left_joy_ = new JoystickWidget(root);
-    right_joy_ = new JoystickWidget(root);
-
-    auto *center_frame = new QFrame(root);
-    auto *center_layout = new QVBoxLayout(center_frame);
-
+    // Средний блок: камеры
     auto *cams_row = new QHBoxLayout();
-    cam_left_view_  = new QLabel(center_frame);
-    cam_mono_view_  = new QLabel(center_frame);
-    cam_right_view_ = new QLabel(center_frame);
+    cam_left_view_  = new QLabel(root);
+    cam_mono_view_  = new QLabel(root);
+    cam_right_view_ = new QLabel(root);
 
     for (QLabel *lab : {cam_left_view_, cam_mono_view_, cam_right_view_}) {
         lab->setMinimumSize(320, 240);
@@ -193,62 +186,46 @@ QWidget* MainWindow::createMainTab()
     cams_row->addWidget(cam_left_view_);
     cams_row->addWidget(cam_mono_view_);
     cams_row->addWidget(cam_right_view_);
+    main_layout->addLayout(cams_row);
 
-    robot_view_ = new RobotViewWidget(center_frame);
-
-    center_layout->addLayout(cams_row);
-    center_layout->addWidget(robot_view_);
-
-    middle_layout->addWidget(left_joy_);
-    middle_layout->addWidget(center_frame, 1);
-    middle_layout->addWidget(right_joy_);
-
-    main_layout->addLayout(middle_layout);
-
-    // Нижний блок: авто-режим, телеметрия, подсказки + сброс позы
+    // Нижний блок: джойстики, вид робота, управление
     auto *bottom_layout = new QHBoxLayout();
 
-    auto *auto_layout = new QVBoxLayout();
+    left_joy_ = new JoystickWidget(root);
+    right_joy_ = new JoystickWidget(root);
+    robot_view_ = new RobotViewWidget(root);
+
+    bottom_layout->addWidget(left_joy_);
+    bottom_layout->addWidget(robot_view_);
+    bottom_layout->addWidget(right_joy_);
+
+    // Панель управления справа
+    auto *control_panel_layout = new QVBoxLayout();
+
     auto_mode_button_ = new QPushButton("AUTO MODE", root);
     auto_mode_button_->setCheckable(true);
     auto_mode_status_ = new QLabel("Auto: OFF", root);
-
     reset_pose_button_ = new QPushButton("Reset pose", root);
 
-    auto_layout->addWidget(auto_mode_button_);
-    auto_layout->addWidget(auto_mode_status_);
-    auto_layout->addWidget(reset_pose_button_);
-    auto_layout->addStretch(1);
+    control_panel_layout->addWidget(auto_mode_button_);
+    control_panel_layout->addWidget(auto_mode_status_);
+    control_panel_layout->addWidget(reset_pose_button_);
+    control_panel_layout->addStretch(1);
 
-    pi_stats_text_ = new QPlainTextEdit(root);
-    pi_stats_text_->setReadOnly(true);
-    pi_stats_text_->setMinimumWidth(250);
+    // Подсказки по управлению
+    auto *hints_group = new QGroupBox("Gamepad Controls", root);
+    auto *hints_layout = new QGridLayout(hints_group);
+    hints_layout->addWidget(new QLabel("Left Stick:", root), 0, 0);
+    hints_layout->addWidget(new QLabel("Drive/Steer", root), 0, 1);
+    hints_layout->addWidget(new QLabel("Right Stick:", root), 1, 0);
+    hints_layout->addWidget(new QLabel("Manipulator Up/Down", root), 1, 1);
+    hints_layout->addWidget(new QLabel("Left/Right Triggers:", root), 2, 0);
+    hints_layout->addWidget(new QLabel("Manipulator Forward/Backward", root), 2, 1);
+    hints_layout->addWidget(new QLabel("A Button:", root), 3, 0);
+    hints_layout->addWidget(new QLabel("Grip Open/Close", root), 3, 1);
 
-    auto *hints_layout = new QVBoxLayout();
-    auto *row1 = new QHBoxLayout();
-    auto *row2 = new QHBoxLayout();
-
-    hint_forward_       = new QPushButton("W / ↑", root);
-    hint_back_          = new QPushButton("S / ↓", root);
-    hint_left_          = new QPushButton("A / ←", root);
-    hint_right_         = new QPushButton("D / →", root);
-    hint_rotate_left_   = new QPushButton("Q", root);
-    hint_rotate_right_  = new QPushButton("E", root);
-
-    row1->addWidget(hint_rotate_left_);
-    row1->addWidget(hint_forward_);
-    row1->addWidget(hint_rotate_right_);
-    row2->addWidget(hint_left_);
-    row2->addWidget(hint_back_);
-    row2->addWidget(hint_right_);
-
-    hints_layout->addLayout(row1);
-    hints_layout->addLayout(row2);
-    hints_layout->addStretch(1);
-
-    bottom_layout->addLayout(auto_layout);
-    bottom_layout->addWidget(pi_stats_text_);
-    bottom_layout->addLayout(hints_layout);
+    control_panel_layout->addWidget(hints_group);
+    bottom_layout->addLayout(control_panel_layout);
 
     main_layout->addLayout(bottom_layout);
 
@@ -262,21 +239,16 @@ QWidget* MainWindow::createMainTab()
     connect(reset_pose_button_, &QPushButton::clicked,
             this, &MainWindow::onResetPose);
 
-    connect(hint_forward_, &QPushButton::clicked, [this]() { left_joy_->setFocus(); });
-    connect(hint_back_,    &QPushButton::clicked, [this]() { left_joy_->setFocus(); });
-    connect(hint_left_,    &QPushButton::clicked, [this]() { right_joy_->setFocus(); });
-    connect(hint_right_,   &QPushButton::clicked, [this]() { right_joy_->setFocus(); });
-
     connect(left_joy_, &JoystickWidget::positionChanged,
             this, [this](double x, double y) {
-                Q_UNUSED(x);
+                control_.drive_w = x * rot_sensitivity_;
                 control_.drive_v = y * trans_sensitivity_;
             });
 
     connect(right_joy_, &JoystickWidget::positionChanged,
             this, [this](double x, double y) {
-                Q_UNUSED(y);
-                control_.drive_w = x * rot_sensitivity_;
+                control_.manip_extend = x;
+                control_.manip_height = y;
             });
 
     return root;
@@ -371,7 +343,7 @@ void MainWindow::setupRosInterfaces()
     pi_stats_sub_ = node_->create_subscription<std_msgs::msg::String>(
         "/pi_stats", 10,
         [this](std_msgs::msg::String::SharedPtr msg) {
-            pi_stats_text_->setPlainText(QString::fromStdString(msg->data));
+            // pi_stats_text_ is removed, so we don't need this subscription
         });
 
     joint_state_sub_ = node_->create_subscription<sensor_msgs::msg::JointState>(

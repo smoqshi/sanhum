@@ -2,7 +2,7 @@
 <package format="3">
   <name>sanhum</name>
   <version>0.0.1</version>
-  <description>Qt-based ROS2 Jazzy GUI for Sanhum robot (Windows server + Raspberry Pi client)</description>
+  <description>Qt-based ROS2 Jazzy GUI for Sanhum robot</description>
 
   <maintainer email="you@example.com">Your Name</maintainer>
   <license>MIT</license>
@@ -22,5 +22,3 @@
   <export>
   </export>
 </package>
-
-

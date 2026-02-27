@@ -93,27 +93,16 @@ void RobotViewWidget::drawTrackedBase(QPainter &p, double scale)
 
     QRectF bodyRect(-body_w / 2.0, -body_l / 2.0, body_w, body_l);
 
-    // Псевдо-3D: верх корпуса чуть уже
     p.save();
     p.setPen(Qt::NoPen);
-    p.setBrush(QColor(60, 60, 60));
+    p.setBrush(QColor(80, 80, 80)); // Solid color for the body
 
     p.drawRect(bodyRect);
 
     // Передняя сторона (по -Y) подчеркнута цветом
-    p.setBrush(QColor(90, 90, 90));
+    p.setBrush(QColor(120, 120, 120));
     QRectF frontRect(-body_w / 2.0, -body_l / 2.0, body_w, body_l * 0.15);
     p.drawRect(frontRect);
-
-    // Квадраты в передних углах 70x70 мм
-    double sq_mm = 70.0;
-    double sq = sq_mm * scale / 1000.0;
-    p.setBrush(QColor(120, 80, 80));
-
-    QRectF frontLeft(-body_w / 2.0, -body_l / 2.0, sq, sq);
-    QRectF frontRight(body_w / 2.0 - sq, -body_l / 2.0, sq, sq);
-    p.drawRect(frontLeft);
-    p.drawRect(frontRight);
 
     // Гусеницы: ширина 50 мм, расстояние между ними 185 мм
     double track_w_mm = 50.0;
@@ -144,14 +133,13 @@ void RobotViewWidget::drawTrackedBase(QPainter &p, double scale)
 void RobotViewWidget::drawManipulator(QPainter &p, double scale)
 {
     // База манипулятора в передней части корпуса
-    // Используем те же размеры корпуса
     double body_l_mm = 370.0;
     double body_l = body_l_mm * scale / 1000.0;
 
     QPointF base(0.0, -body_l / 2.0);
 
     p.save();
-    p.setPen(QPen(Qt::yellow, 3));
+    p.setPen(QPen(Qt::cyan, 4, Qt::SolidLine, Qt::RoundCap)); // Thicker and cyan
 
     // Условные длины звеньев, мм
     double len1_mm = 100.0;
@@ -184,8 +172,8 @@ void RobotViewWidget::drawManipulator(QPainter &p, double scale)
     p.drawLine(j3, j4);
 
     // Захват
-    p.setPen(QPen(gripper_closed_ ? Qt::red : Qt::green, 3));
-    double grip_size = 10.0;
+    p.setPen(QPen(gripper_closed_ ? Qt::red : Qt::green, 4, Qt::SolidLine, Qt::RoundCap));
+    double grip_size = 12.0;
     QPointF g1(j4.x() - grip_size, j4.y());
     QPointF g2(j4.x() + grip_size, j4.y());
     p.drawLine(g1, j4);
