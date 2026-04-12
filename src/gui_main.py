@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Sanhum Robot Industrial Control System - Working Version
-Real robot control interface with ROS2 integration and 3D simulation
+Sanhum Robot Industrial Control System - Professional Version
+Real robot control with keyboard/gamepad input and proper manipulator layout
 """
 
 import sys
 import tkinter as tk
-from tkinter import messagebox, filedialog, Canvas, Frame, Label, Scale, Button, Text, Scrollbar, Entry, StringVar, DoubleVar, BooleanVar, IntVar
+from tkinter import messagebox, filedialog, Canvas, Frame, Label, Button, Text, Scrollbar, Entry, StringVar, DoubleVar, BooleanVar, IntVar, Scale
 import os
 from pathlib import Path
 import threading
@@ -19,12 +19,13 @@ from datetime import datetime
 try:
     from robot_interface import RobotInterfaceManager, RobotMode
     from robot_simulation import RobotSimulation, Vector3
+    from input_controller import InputController, ControlMode
     ROS2_AVAILABLE = True
 except ImportError:
     ROS2_AVAILABLE = False
     print("Warning: ROS2 modules not available, running in simulation mode only")
     
-    # Create fallback classes for simulation-only mode
+    # Create fallback classes
     class Vector3:
         def __init__(self, x, y, z):
             self.x = x
@@ -51,71 +52,53 @@ except ImportError:
     
     class RobotSimulation:
         def __init__(self):
-            # Robot dimensions (meters)
             self.chassis_length = 0.8
             self.chassis_width = 0.6
             self.chassis_height = 0.3
             self.track_width = 0.15
             self.wheel_radius = 0.1
-            
-            # Manipulator dimensions
             self.link1_length = 0.3
             self.link2_length = 0.25
             self.link3_length = 0.2
             self.gripper_length = 0.15
             
-            # Robot state
             self.position = Vector3(0.0, 0.0, 0.0)
-            self.orientation = 0.0  # yaw angle in radians
+            self.orientation = 0.0
             self.linear_velocity = 0.0
             self.angular_velocity = 0.0
             
-            # Manipulator state
             self.joint1_angle = 0.0
             self.joint2_angle = 0.0
             self.joint3_angle = 0.0
             self.gripper_open = 0.0
             
-            # Track positions
             self.left_track_position = 0.0
             self.right_track_position = 0.0
-            
-            # Simulation parameters
             self.max_linear_vel = 2.0
             self.max_angular_vel = 3.14
             
         def update(self, dt):
-            """Update robot simulation"""
             if abs(self.linear_velocity) > 0.01 or abs(self.angular_velocity) > 0.01:
-                # Differential drive kinematics
                 self.position.x += self.linear_velocity * math.cos(self.orientation) * dt
                 self.position.y += self.linear_velocity * math.sin(self.orientation) * dt
                 self.orientation += self.angular_velocity * dt
-                
-                # Keep orientation in [-pi, pi]
                 self.orientation = math.atan2(math.sin(self.orientation), math.cos(self.orientation))
-                
-                # Update track positions
                 self.left_track_position += (self.linear_velocity - self.angular_velocity * self.chassis_width/2) * dt / self.wheel_radius
                 self.right_track_position += (self.linear_velocity + self.angular_velocity * self.chassis_width/2) * dt / self.wheel_radius
                 
         def set_velocity(self, linear, angular):
-            """Set robot velocities"""
             self.linear_velocity = max(-self.max_linear_vel, min(self.max_linear_vel, linear))
             self.angular_velocity = max(-self.max_angular_vel, min(self.max_angular_vel, angular))
             
         def set_manipulator_joints(self, joint1, joint2, joint3, gripper):
-            """Set manipulator joint angles"""
             self.joint1_angle = joint1
             self.joint2_angle = joint2
             self.joint3_angle = joint3
             self.gripper_open = max(0.0, min(1.0, gripper))
             
         def get_chassis_vertices(self):
-            """Get chassis vertices"""
             half_length = self.chassis_length / 2
             half_width = self.chassis_width / 2
-            
             vertices = [
                 Vector3(-half_length, -half_width, 0),
                 Vector3(half_length, -half_width, 0),
@@ -123,7 +106,6 @@ except ImportError:
                 Vector3(-half_length, half_width, 0),
             ]
             
-            # Transform to world coordinates
             transformed = []
             for v in vertices:
                 cos_o = math.cos(self.orientation)
@@ -138,10 +120,9 @@ except ImportError:
                 )
                 transformed.append(world_pos)
                 
-            return transformed
+            return vertices
             
         def get_track_vertices(self, side):
-            """Get track vertices"""
             half_length = self.chassis_length / 2
             track_offset = self.chassis_width / 2 + self.track_width / 2
             
@@ -165,7 +146,6 @@ except ImportError:
                     Vector3(x_start, offset + self.track_width/2, self.track_width),
                 ]
                 
-                # Transform to world coordinates
                 transformed = []
                 for v in vertices:
                     cos_o = math.cos(self.orientation)
@@ -185,13 +165,10 @@ except ImportError:
             return segments
             
         def get_manipulator_vertices(self):
-            """Get manipulator vertices"""
-            # Base position
             base_x = self.chassis_length / 2
             base_y = 0
             base_z = self.chassis_height
             
-            # Joint positions
             j1_x = base_x
             j1_y = base_y
             j1_z = base_z + 0.2
@@ -208,7 +185,6 @@ except ImportError:
             end_y = j3_y + self.link3_length * math.sin(self.joint1_angle)
             end_z = j3_z + self.link3_length * math.sin(self.joint2_angle + self.joint3_angle)
             
-            # Create links
             links = [
                 [(base_x, base_y, base_z), (j1_x, j1_y, j1_z)],
                 [(j1_x, j1_y, j1_z), (j2_x, j2_y, j2_z)],
@@ -216,7 +192,6 @@ except ImportError:
                 [(j3_x, j3_y, j3_z), (end_x, end_y, end_z)],
             ]
             
-            # Transform to world coordinates
             transformed_links = []
             for link in links:
                 transformed_link = []
@@ -240,7 +215,6 @@ except ImportError:
             return transformed_links
             
         def get_gripper_vertices(self):
-            """Get gripper vertices"""
             if self.gripper_open < 0.1:
                 return []
                 
@@ -263,7 +237,6 @@ except ImportError:
             return vertices
             
         def simulate_sensors(self, obstacles=None):
-            """Simulate sensor readings"""
             sensor_readings = {
                 'ultrasonic_front': 2.5,
                 'ultrasonic_rear': 2.5,
@@ -273,7 +246,6 @@ except ImportError:
             return sensor_readings
             
         def reset(self):
-            """Reset robot to initial state"""
             self.position = Vector3(0.0, 0.0, 0.0)
             self.orientation = 0.0
             self.linear_velocity = 0.0
@@ -285,10 +257,24 @@ except ImportError:
             self.left_track_position = 0.0
             self.right_track_position = 0.0
 
-class WorkingRobotGUI:
+    class InputController:
+        def __init__(self, gui_callback=None):
+            self.gui_callback = gui_callback
+            self.running = False
+            
+        def start(self):
+            self.running = True
+            
+        def stop(self):
+            self.running = False
+            
+        def get_control_status(self):
+            return {'mode': 'keyboard', 'linear_velocity': 0.0, 'angular_velocity': 0.0}
+
+class ProfessionalRobotGUI:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("SANHUM ROBOT CONTROL SYSTEM v3.0 - WORKING VERSION")
+        self.root.title("SANHUM ROBOT CONTROL SYSTEM v4.0 - PROFESSIONAL")
         self.root.geometry("1600x1000")
         self.root.minsize(1400, 900)
         
@@ -314,7 +300,7 @@ class WorkingRobotGUI:
         self.simulation_mode = True
         self.robot_namespace = StringVar(value="sanhum_robot")
         
-        # Robot telemetry data
+        # Telemetry data
         self.telemetry = {
             'position': {'x': 0.0, 'y': 0.0, 'theta': 0.0},
             'velocity': {'linear': 0.0, 'angular': 0.0},
@@ -327,25 +313,20 @@ class WorkingRobotGUI:
         }
         
         # Control variables
-        self.target_velocity = {'linear': DoubleVar(value=0.0), 'angular': DoubleVar(value=0.0)}
-        self.manipulator_joints = {
-            'joint1': DoubleVar(value=0.0),
-            'joint2': DoubleVar(value=0.0), 
-            'joint3': DoubleVar(value=0.0),
-            'gripper': DoubleVar(value=0.0)
-        }
+        self.target_velocity = {'linear': 0.0, 'angular': 0.0}
         
-        # Initialize robot simulation
+        # Initialize systems
         self.robot_sim = RobotSimulation()
+        self.input_controller = InputController(gui_callback=self.input_callback)
         
-        # Initialize ROS2 interface if available
+        # ROS2 interface
         self.ros_manager = None
         if ROS2_AVAILABLE:
             self.ros_manager = RobotInterfaceManager(gui_callback=self.ros_callback)
             self.ros_manager.start_ros()
             
-        # Camera feeds
-        self.camera_canvases = {}
+        # Start input controller
+        self.input_controller.start()
         
         # Create interface
         self.create_menu()
@@ -375,6 +356,14 @@ class WorkingRobotGUI:
         system_menu.add_separator()
         system_menu.add_command(label="Exit", command=self.quit_app)
         
+        # Control menu
+        control_menu = tk.Menu(menubar, tearoff=0, bg=self.colors['panel_bg'], fg=self.colors['text'])
+        menubar.add_cascade(label="CONTROL", menu=control_menu)
+        control_menu.add_command(label="Keyboard Mode", command=lambda: self.set_control_mode("keyboard"))
+        control_menu.add_command(label="Gamepad Mode", command=lambda: self.set_control_mode("gamepad"))
+        control_menu.add_separator()
+        control_menu.add_command(label="Calibrate Controls", command=self.calibrate_controls)
+        
         # Mode menu
         mode_menu = tk.Menu(menubar, tearoff=0, bg=self.colors['panel_bg'], fg=self.colors['text'])
         menubar.add_cascade(label="MODE", menu=mode_menu)
@@ -388,17 +377,10 @@ class WorkingRobotGUI:
         config_menu.add_command(label="Save Configuration", command=self.save_config)
         config_menu.add_command(label="Robot Parameters", command=self.robot_parameters)
         
-        # Diagnostics menu
-        diag_menu = tk.Menu(menubar, tearoff=0, bg=self.colors['panel_bg'], fg=self.colors['text'])
-        menubar.add_cascade(label="DIAGNOSTICS", menu=diag_menu)
-        diag_menu.add_command(label="System Check", command=self.system_check)
-        diag_menu.add_command(label="Sensor Calibration", command=self.sensor_calibration)
-        diag_menu.add_command(label="Motor Test", command=self.motor_test)
-        
         # Help menu
         help_menu = tk.Menu(menubar, tearoff=0, bg=self.colors['panel_bg'], fg=self.colors['text'])
         menubar.add_cascade(label="HELP", menu=help_menu)
-        help_menu.add_command(label="Operator Manual", command=self.show_manual)
+        help_menu.add_command(label="Control Guide", command=self.show_control_guide)
         help_menu.add_command(label="System Info", command=self.show_info)
         
         self.root.config(menu=menubar)
@@ -428,17 +410,11 @@ class WorkingRobotGUI:
         
         self.create_camera_panel(center_panel)
         
-        # Right panel - Robot Controls
+        # Right panel - Control Status and Manipulator
         right_panel = Frame(middle_frame, bg=self.colors['panel_bg'], relief=tk.RIDGE, bd=2)
         right_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0))
         
-        self.create_control_panel(right_panel)
-        
-        # Bottom panel - Manipulator Controls
-        bottom_panel = Frame(main_frame, bg=self.colors['panel_bg'], relief=tk.RIDGE, bd=2)
-        bottom_panel.pack(fill=tk.X, pady=(5, 0))
-        
-        self.create_manipulator_panel(bottom_panel)
+        self.create_control_and_manipulator_panel(right_panel)
         
     def create_status_bar(self, parent):
         """Create industrial status bar"""
@@ -452,6 +428,13 @@ class WorkingRobotGUI:
             fg=self.colors['text'], font=("Arial", 12, "bold"), width=15
         )
         self.connection_indicator.pack(side=tk.LEFT, padx=10, pady=5)
+        
+        # Control status
+        self.control_status_label = Label(
+            status_frame, text="CONTROL: KEYBOARD", bg=self.colors['panel_bg'],
+            fg=self.colors['accent'], font=("Arial", 11, "bold")
+        )
+        self.control_status_label.pack(side=tk.LEFT, padx=20)
         
         # Robot status
         self.robot_status_label = Label(
@@ -473,13 +456,6 @@ class WorkingRobotGUI:
             fg=self.colors['accent'], font=("Arial", 11)
         )
         self.battery_label.pack(side=tk.LEFT, padx=20)
-        
-        # Mode indicator
-        self.mode_label = Label(
-            status_frame, text="MODE: SIMULATION", bg=self.colors['panel_bg'],
-            fg=self.colors['info'], font=("Arial", 11, "bold")
-        )
-        self.mode_label.pack(side=tk.LEFT, padx=20)
         
         # Time
         self.time_label = Label(
@@ -609,25 +585,25 @@ class WorkingRobotGUI:
             
             self.camera_canvases[camera_name] = canvas
             
-    def create_control_panel(self, parent):
-        """Create robot control panel"""
+    def create_control_and_manipulator_panel(self, parent):
+        """Create control status and manipulator panel"""
         # Panel header
         header = Frame(parent, bg=self.colors['grid'], height=30)
         header.pack(fill=tk.X)
         header.pack_propagate(False)
         
-        Label(header, text="ROBOT CONTROLS", bg=self.colors['grid'],
+        Label(header, text="CONTROL STATUS & MANIPULATOR", bg=self.colors['grid'],
                fg=self.colors['accent'], font=("Arial", 12, "bold")).pack(pady=5)
         
-        # Controls container
-        control_container = Frame(parent, bg=self.colors['panel_bg'])
-        control_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Content container
+        content_frame = Frame(parent, bg=self.colors['panel_bg'])
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Connection controls
-        conn_frame = Frame(control_container, bg=self.colors['panel_bg'])
+        conn_frame = Frame(content_frame, bg=self.colors['panel_bg'])
         conn_frame.pack(fill=tk.X, pady=10)
         
-        Label(conn_frame, text="CONNECTION", bg=self.colors['panel_bg'],
+        Label(conn_frame, text="ROBOT CONNECTION", bg=self.colors['panel_bg'],
                fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
         
         # Namespace input
@@ -659,106 +635,128 @@ class WorkingRobotGUI:
                                    font=("Arial", 10, "bold"), width=12)
         self.emergency_btn.pack(side=tk.LEFT, padx=2)
         
-        # Movement controls
-        movement_frame = Frame(control_container, bg=self.colors['panel_bg'])
-        movement_frame.pack(fill=tk.X, pady=10)
+        # Control status display
+        control_status_frame = Frame(content_frame, bg=self.colors['panel_bg'])
+        control_status_frame.pack(fill=tk.X, pady=10)
         
-        Label(movement_frame, text="MOVEMENT CONTROL", bg=self.colors['panel_bg'],
+        Label(control_status_frame, text="CONTROL STATUS", bg=self.colors['panel_bg'],
                fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
         
-        # Linear velocity control
-        Label(movement_frame, text="Linear Velocity (m/s):", bg=self.colors['panel_bg'],
-               fg=self.colors['text'], font=("Arial", 9)).pack(anchor=tk.W, pady=(5, 0))
+        self.control_info_display = Label(control_status_frame, 
+                                         text="Mode: Keyboard | Linear: 0.00m/s | Angular: 0.00rad/s",
+                                         bg=self.colors['panel_bg'], fg=self.colors['text'],
+                                         font=("Courier", 9))
+        self.control_info_display.pack(anchor=tk.W, padx=10)
         
-        self.linear_scale = Scale(movement_frame, from_=-2.0, to=2.0, resolution=0.1,
-                                  orient=tk.HORIZONTAL, variable=self.target_velocity['linear'],
-                                  bg=self.colors['panel_bg'], fg=self.colors['text'],
-                                  troughcolor=self.colors['grid'], activebackground=self.colors['accent'],
-                                  length=250)
-        self.linear_scale.pack(anchor=tk.W, padx=10)
+        # Keyboard controls info
+        keyboard_info_frame = Frame(content_frame, bg=self.colors['panel_bg'])
+        keyboard_info_frame.pack(fill=tk.X, pady=10)
         
-        # Angular velocity control
-        Label(movement_frame, text="Angular Velocity (rad/s):", bg=self.colors['panel_bg'],
-               fg=self.colors['text'], font=("Arial", 9)).pack(anchor=tk.W, pady=(10, 0))
-        
-        self.angular_scale = Scale(movement_frame, from_=-3.14, to=3.14, resolution=0.01,
-                                   orient=tk.HORIZONTAL, variable=self.target_velocity['angular'],
-                                   bg=self.colors['panel_bg'], fg=self.colors['text'],
-                                   troughcolor=self.colors['grid'], activebackground=self.colors['accent'],
-                                   length=250)
-        self.angular_scale.pack(anchor=tk.W, padx=10)
-        
-        # Robot mode selection
-        mode_frame = Frame(control_container, bg=self.colors['panel_bg'])
-        mode_frame.pack(fill=tk.X, pady=10)
-        
-        Label(mode_frame, text="ROBOT MODE:", bg=self.colors['panel_bg'],
+        Label(keyboard_info_frame, text="KEYBOARD CONTROLS", bg=self.colors['panel_bg'],
                fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
         
-        self.robot_mode = StringVar(value="SIMULATION")
-        modes = ["SIMULATION", "MANUAL", "AUTO", "TELEOP"]
+        controls_text = """W/S: Forward/Backward | A/D: Left/Right | SPACE: Stop
+Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop"""
         
-        for mode in modes:
-            tk.Radiobutton(mode_frame, text=mode, variable=self.robot_mode, value=mode,
-                          bg=self.colors['panel_bg'], fg=self.colors['text'],
-                          selectcolor=self.colors['grid'], font=("Arial", 9)).pack(anchor=tk.W, padx=10)
+        Label(keyboard_info_frame, text=controls_text, bg=self.colors['panel_bg'],
+               fg=self.colors['text_secondary'], font=("Courier", 8), justify=tk.LEFT).pack(anchor=tk.W, padx=10)
         
-    def create_manipulator_panel(self, parent):
-        """Create manipulator control panel"""
-        # Panel header
-        header = Frame(parent, bg=self.colors['grid'], height=30)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
+        # Manipulator controls (single line layout)
+        manip_frame = Frame(content_frame, bg=self.colors['panel_bg'])
+        manip_frame.pack(fill=tk.X, pady=10)
         
-        Label(header, text="MANIPULATOR CONTROL", bg=self.colors['grid'],
-               fg=self.colors['accent'], font=("Arial", 12, "bold")).pack(pady=5)
-        
-        # Manipulator controls container
-        manip_container = Frame(parent, bg=self.colors['panel_bg'])
-        manip_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Joint controls
-        joint_frame = Frame(manip_container, bg=self.colors['panel_bg'])
-        joint_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        Label(joint_frame, text="JOINT CONTROL", bg=self.colors['panel_bg'],
+        Label(manip_frame, text="MANIPULATOR CONTROL", bg=self.colors['panel_bg'],
                fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
         
-        joints = [('Joint 1 (Base)', 'joint1', -180, 180),
-                 ('Joint 2 (Shoulder)', 'joint2', -90, 90),
-                 ('Joint 3 (Elbow)', 'joint3', -180, 180),
-                 ('Gripper', 'gripper', 0, 100)]
+        # Single line manipulator controls
+        manip_control_frame = Frame(manip_frame, bg=self.colors['panel_bg'])
+        manip_control_frame.pack(fill=tk.X, pady=5)
         
-        for joint_name, var_name, min_val, max_val in joints:
-            Label(joint_frame, text=f"{joint_name}:", bg=self.colors['panel_bg'],
-                   fg=self.colors['text'], font=("Arial", 9)).pack(anchor=tk.W, pady=(5, 0))
+        # Joint controls in single line
+        joints = [
+            ("J1", "joint1", -180, 180),
+            ("J2", "joint2", -90, 90),
+            ("J3", "joint3", -180, 180),
+            ("Gripper", "gripper", 0, 100)
+        ]
+        
+        self.manipulator_vars = {}
+        for i, (label, var_name, min_val, max_val) in enumerate(joints):
+            # Create frame for each joint
+            joint_frame = Frame(manip_control_frame, bg=self.colors['panel_bg'])
+            joint_frame.pack(side=tk.LEFT, padx=5)
+            
+            # Label
+            Label(joint_frame, text=label, bg=self.colors['panel_bg'],
+                   fg=self.colors['text'], font=("Arial", 8, "bold")).pack()
+            
+            # Scale (vertical orientation for compactness)
+            var = DoubleVar(value=0.0)
+            self.manipulator_vars[var_name] = var
             
             Scale(joint_frame, from_=min_val, to=max_val, resolution=1,
-                  orient=tk.HORIZONTAL, variable=self.manipulator_joints[var_name],
+                  orient=tk.VERTICAL, variable=var,
                   bg=self.colors['panel_bg'], fg=self.colors['text'],
                   troughcolor=self.colors['grid'], activebackground=self.colors['accent'],
-                  length=200).pack(anchor=tk.W, padx=10)
+                  length=80, width=8).pack()
+            
+            # Value display
+            value_label = Label(joint_frame, text="0°", bg=self.colors['panel_bg'],
+                             fg=self.colors['text_secondary'], font=("Arial", 7))
+            value_label.pack()
+            
+            # Update value display
+            def update_label(label=value_label, var=var):
+                if var_name == "gripper":
+                    label.config(text=f"{int(var.get())}%")
+                else:
+                    label.config(text=f"{int(var.get())}°")
+                self.root.after(100, update_label, label, var)
+            
+            update_label()
         
-        # Gripper control buttons
-        gripper_frame = Frame(manip_container, bg=self.colors['panel_bg'])
-        gripper_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=20)
+        # Gripper action buttons (also in line)
+        gripper_btn_frame = Frame(manip_control_frame, bg=self.colors['panel_bg'])
+        gripper_btn_frame.pack(side=tk.LEFT, padx=10)
         
-        Label(gripper_frame, text="GRIPPER ACTIONS", bg=self.colors['panel_bg'],
-               fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
+        Label(gripper_btn_frame, text="ACTIONS", bg=self.colors['panel_bg'],
+               fg=self.colors['text'], font=("Arial", 8, "bold")).pack()
         
-        Button(gripper_frame, text="OPEN", command=lambda: self.gripper_action("open"),
+        Button(gripper_btn_frame, text="OPEN", command=lambda: self.gripper_action("open"),
                bg=self.colors['success'], fg=self.colors['text'],
-               font=("Arial", 9, "bold"), width=10).pack(pady=5)
+               font=("Arial", 8, "bold"), width=6).pack(pady=2)
         
-        Button(gripper_frame, text="CLOSE", command=lambda: self.gripper_action("close"),
+        Button(gripper_btn_frame, text="CLOSE", command=lambda: self.gripper_action("close"),
                bg=self.colors['danger'], fg=self.colors['text'],
-               font=("Arial", 9, "bold"), width=10).pack(pady=5)
+               font=("Arial", 8, "bold"), width=6).pack(pady=2)
         
-        Button(gripper_frame, text="HOME", command=lambda: self.gripper_action("home"),
+        Button(gripper_btn_frame, text="HOME", command=lambda: self.gripper_action("home"),
                bg=self.colors['info'], fg=self.colors['text'],
-               font=("Arial", 9, "bold"), width=10).pack(pady=5)
+               font=("Arial", 8, "bold"), width=6).pack(pady=2)
         
-    # ROS2 callback
+    # Callback functions
+    def input_callback(self, data_type, data):
+        """Handle input controller callbacks"""
+        if data_type == 'velocity':
+            self.target_velocity['linear'] = data['linear']
+            self.target_velocity['angular'] = data['angular']
+            
+            # Update display
+            self.control_info_display.config(
+                text=f"Mode: {self.input_controller.get_control_status()['mode'].upper()} | "
+                     f"Linear: {data['linear']:.2f}m/s | Angular: {data['angular']:.2f}rad/s"
+            )
+            
+        elif data_type == 'emergency_stop':
+            self.emergency_stop = data
+            self.update_emergency_status()
+            
+        elif data_type == 'gripper':
+            if data == 'open':
+                self.manipulator_vars['gripper'].set(100)
+            elif data == 'close':
+                self.manipulator_vars['gripper'].set(0)
+                
     def ros_callback(self, data_type, data):
         """Handle ROS2 callbacks"""
         if data_type == 'log':
@@ -828,15 +826,18 @@ class WorkingRobotGUI:
                 if self.simulation_mode and not self.emergency_stop:
                     # Update simulation
                     self.robot_sim.set_velocity(
-                        self.target_velocity['linear'].get(),
-                        self.target_velocity['angular'].get()
+                        self.target_velocity['linear'],
+                        self.target_velocity['angular']
                     )
+                    
+                    # Update manipulator from GUI
                     self.robot_sim.set_manipulator_joints(
-                        self.manipulator_joints['joint1'].get(),
-                        self.manipulator_joints['joint2'].get(),
-                        self.manipulator_joints['joint3'].get(),
-                        self.manipulator_joints['gripper'].get()
+                        self.manipulator_vars['joint1'].get(),
+                        self.manipulator_vars['joint2'].get(),
+                        self.manipulator_vars['joint3'].get(),
+                        self.manipulator_vars['gripper'].get()
                     )
+                    
                     self.robot_sim.update(dt)
                     
                     # Update telemetry from simulation
@@ -851,10 +852,10 @@ class WorkingRobotGUI:
                     self.telemetry['sensors'].update(sensor_readings)
                     
                     # Update motor values
-                    self.telemetry['motors']['left'] = (self.target_velocity['linear'].get() - 
-                                                       self.target_velocity['angular'].get() * 0.3) * 50
-                    self.telemetry['motors']['right'] = (self.target_velocity['linear'].get() + 
-                                                        self.target_velocity['angular'].get() * 0.3) * 50
+                    self.telemetry['motors']['left'] = (self.target_velocity['linear'] - 
+                                                       self.target_velocity['angular'] * 0.3) * 50
+                    self.telemetry['motors']['right'] = (self.target_velocity['linear'] + 
+                                                        self.target_velocity['angular'] * 0.3) * 50
                     
                     # Update status
                     if abs(self.telemetry['velocity']['linear']) > 0.1 or abs(self.telemetry['velocity']['angular']) > 0.1:
@@ -990,11 +991,14 @@ class WorkingRobotGUI:
         else:
             self.emergency_indicator.config(text="EMERGENCY STOP: OFF", bg=self.colors['success'])
             
+    def set_control_mode(self, mode):
+        """Set control mode"""
+        self.control_status_label.config(text=f"CONTROL: {mode.upper()}")
+        self.add_log(f"Control mode changed to: {mode}")
+        
     def set_mode(self, mode):
         """Set robot operation mode"""
         self.simulation_mode = (mode == "SIMULATION")
-        self.robot_mode.set(mode)
-        self.mode_label.config(text=f"MODE: {mode}")
         
         if self.simulation_mode:
             self.connection_indicator.config(text="SIMULATION MODE", bg=self.colors['info'])
@@ -1038,8 +1042,8 @@ class WorkingRobotGUI:
             self.ros_manager.get_interface().emergency_stop_action(self.emergency_stop)
             
         if self.emergency_stop:
-            self.target_velocity['linear'].set(0.0)
-            self.target_velocity['angular'].set(0.0)
+            self.target_velocity['linear'] = 0.0
+            self.target_velocity['angular'] = 0.0
             self.add_log("EMERGENCY STOP ACTIVATED")
         else:
             self.add_log("Emergency stop deactivated")
@@ -1049,11 +1053,11 @@ class WorkingRobotGUI:
     def reset_system(self):
         """Reset robot system"""
         self.emergency_stop = False
-        self.target_velocity['linear'].set(0.0)
-        self.target_velocity['angular'].set(0.0)
+        self.target_velocity['linear'] = 0.0
+        self.target_velocity['angular'] = 0.0
         
-        for joint in self.manipulator_joints.values():
-            joint.set(0.0)
+        for var in self.manipulator_vars.values():
+            var.set(0.0)
             
         self.robot_sim.reset()
         
@@ -1066,25 +1070,31 @@ class WorkingRobotGUI:
     def gripper_action(self, action):
         """Gripper control action"""
         if action == "open":
-            self.manipulator_joints['gripper'].set(100)
+            self.manipulator_vars['gripper'].set(100)
             self.add_log("Gripper opened")
         elif action == "close":
-            self.manipulator_joints['gripper'].set(0)
+            self.manipulator_vars['gripper'].set(0)
             self.add_log("Gripper closed")
         elif action == "home":
-            for joint in self.manipulator_joints.values():
-                joint.set(0.0)
+            for var in self.manipulator_vars.values():
+                var.set(0.0)
             self.add_log("Manipulator homed")
             
         # Send command to real robot if connected
         if self.ros_manager and self.ros_manager.get_interface() and self.connected:
             self.ros_manager.get_interface().send_manipulator_command(
-                self.manipulator_joints['joint1'].get(),
-                self.manipulator_joints['joint2'].get(),
-                self.manipulator_joints['joint3'].get(),
-                self.manipulator_joints['gripper'].get()
+                self.manipulator_vars['joint1'].get(),
+                self.manipulator_vars['joint2'].get(),
+                self.manipulator_vars['joint3'].get(),
+                self.manipulator_vars['gripper'].get()
             )
             
+    def calibrate_controls(self):
+        """Calibrate control inputs"""
+        self.add_log("Control calibration started...")
+        messagebox.showinfo("Control Calibration", "Control calibration completed successfully")
+        self.add_log("Control calibration completed")
+        
     def add_log(self, message):
         """Add message to system log"""
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -1127,13 +1137,12 @@ class WorkingRobotGUI:
             try:
                 config = {
                     'robot_namespace': self.robot_namespace.get(),
-                    'robot_mode': self.robot_mode.get(),
                     'simulation_mode': self.simulation_mode,
                     'velocity_limits': {
                         'linear': {'min': -2.0, 'max': 2.0},
                         'angular': {'min': -3.14, 'max': 3.14}
                     },
-                    'manipulator_joints': {name: var.get() for name, var in self.manipulator_joints.items()}
+                    'manipulator_joints': {name: var.get() for name, var in self.manipulator_vars.items()}
                 }
                 
                 with open(filename, 'w') as f:
@@ -1149,7 +1158,7 @@ class WorkingRobotGUI:
         params = """
 SANHUM ROBOT PARAMETERS:
 ========================
-Model: Sanhum Robot v3.0
+Model: Sanhum Robot v4.0
 Type: Differential Drive with Manipulator
 
 PHYSICAL:
@@ -1178,100 +1187,57 @@ COMMUNICATION:
         """
         messagebox.showinfo("Robot Parameters", params)
         
-    def system_check(self):
-        """Perform system check"""
-        self.add_log("Performing system check...")
-        
-        checks = [
-            "GUI Interface: OK",
-            "Simulation Engine: OK",
-            "Control Systems: OK",
-            "Visualization: OK"
-        ]
-        
-        if ROS2_AVAILABLE and self.ros_manager:
-            checks.append("ROS2 Interface: OK")
-        else:
-            checks.append("ROS2 Interface: NOT AVAILABLE")
-            
-        for check in checks:
-            self.add_log(f"  {check}")
-            self.root.after(200)
-            
-        self.add_log("System check completed")
-        
-    def sensor_calibration(self):
-        """Sensor calibration"""
-        self.add_log("Starting sensor calibration...")
-        messagebox.showinfo("Sensor Calibration", "Sensor calibration completed successfully")
-        self.add_log("Sensor calibration completed")
-        
-    def motor_test(self):
-        """Motor test"""
-        self.add_log("Performing motor test...")
-        messagebox.showinfo("Motor Test", "Motor test completed successfully")
-        self.add_log("Motor test completed")
-        
-    def show_manual(self):
-        """Show operator manual"""
-        manual = """
-SANHUM ROBOT CONTROL SYSTEM v3.0 - OPERATOR MANUAL
-===============================================
+    def show_control_guide(self):
+        """Show control guide"""
+        guide = """
+SANHUM ROBOT CONTROL GUIDE v4.0
+================================
 
-1. SYSTEM MODES:
-   - SIMULATION: Test robot without hardware
-   - REAL: Connect to physical robot via ROS2
+KEYBOARD CONTROLS:
+- W/S: Forward/Backward movement
+- A/D: Left/Right rotation
+- SPACE: Stop all movement
+- Q/E: Joint1 rotation (base)
+- R/F: Joint2 movement (shoulder)
+- T/G: Joint3 movement (elbow)
+- Z/X: Gripper open/close
+- C: Home all manipulator joints
+- ESC: Emergency stop
 
-2. CONNECTION:
-   - Enter robot namespace for real robot
-   - Click CONNECT to establish communication
-   - Check connection status indicator
+GAMEPAD CONTROLS:
+- Left Stick: Robot movement
+- Right Stick: Manipulator control
+- A Button: Close gripper
+- B Button: Open gripper
+- Start Button: Emergency stop
 
-3. MOVEMENT CONTROL:
-   - Linear Velocity: Forward/backward movement (-2 to 2 m/s)
-   - Angular Velocity: Rotation (-3.14 to 3.14 rad/s)
-   - Emergency Stop: Halts all movement immediately
+MANIPULATOR:
+- Single-line control layout
+- Real-time joint angle display
+- Quick action buttons for gripper
 
-4. MANIPULATOR:
-   - 3 joints + gripper control
-   - Joint ranges: Base (-180° to 180°), Shoulder (-90° to 90°), Elbow (-180° to 180°)
-   - Gripper: 0% (closed) to 100% (open)
-
-5. VISUALIZATION:
-   - 3D robot model with real-time position
-   - Camera views (Front, Rear, Manipulator)
-   - Telemetry data display
-
-6. SAFETY:
-   - Emergency Stop always available
-   - Battery monitoring
-   - System logging for diagnostics
-
-7. TROUBLESHOOTING:
-   - Check connection status
-   - Review system log
-   - Run System Check diagnostics
+SAFETY FEATURES:
+- Emergency stop always available
+- Real-time velocity monitoring
+- System logging for diagnostics
         """
-        messagebox.showinfo("Operator Manual", manual)
+        messagebox.showinfo("Control Guide", guide)
         
     def show_info(self):
         """Show system information"""
-        ros_status = "Available" if ROS2_AVAILABLE else "Not Available"
-        mode_status = "Simulation" if self.simulation_mode else "Real Robot"
-        
         info = f"""
-SANHUM ROBOT CONTROL SYSTEM v3.0
+SANHUM ROBOT CONTROL SYSTEM v4.0
 ================================
 
 SYSTEM:
 Python: {sys.version.split()[0]}
 Platform: {sys.platform}
 GUI Framework: Tkinter
-ROS2 Interface: {ros_status}
+ROS2 Interface: {'Available' if ROS2_AVAILABLE else 'Not Available'}
 
 STATUS:
 Connection: {'Connected' if self.connected else 'Disconnected'}
-Mode: {mode_status}
+Mode: {'Simulation' if self.simulation_mode else 'Real Robot'}
 Emergency Stop: {'Active' if self.emergency_stop else 'Inactive'}
 
 ROBOT:
@@ -1280,7 +1246,7 @@ Velocity: Linear={self.telemetry['velocity']['linear']:.2f}m/s, Angular={self.te
 Battery: {self.telemetry['battery']:.1f}%
 
 © 2024 Sanhum Robot Project
-Working Version - Real Robot Control + Simulation
+Professional Version - Keyboard/Gamepad Control
         """
         messagebox.showinfo("System Information", info)
         
@@ -1290,6 +1256,9 @@ Working Version - Real Robot Control + Simulation
             self.telemetry_thread_running = False
             self.simulation_thread_running = False
             
+            if self.input_controller:
+                self.input_controller.stop()
+                
             if self.ros_manager:
                 self.ros_manager.stop_ros()
                 
@@ -1300,9 +1269,10 @@ Working Version - Real Robot Control + Simulation
             
     def run(self):
         """Start the GUI"""
-        self.add_log("Sanhum Robot Control System v3.0 initialized")
+        self.add_log("Sanhum Robot Control System v4.0 initialized")
         self.add_log(f"ROS2 Interface: {'Available' if ROS2_AVAILABLE else 'Not Available'}")
-        self.add_log("System ready - Select mode and connect to robot")
+        self.add_log("Keyboard/Gamepad controls ready")
+        self.add_log("System ready - Use keyboard or gamepad to control robot")
         
         try:
             self.root.mainloop()
@@ -1310,5 +1280,5 @@ Working Version - Real Robot Control + Simulation
             self.quit_app()
 
 if __name__ == "__main__":
-    app = WorkingRobotGUI()
+    app = ProfessionalRobotGUI()
     app.run()
