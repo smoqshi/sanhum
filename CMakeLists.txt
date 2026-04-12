@@ -13,7 +13,7 @@ find_package(sensor_msgs REQUIRED)
 
 if(WIN32)
     # --- Windows GUI Build ---
-    message(STATUS "Configuring for Windows GUI")
+    message(STATUS "Configuring for Windows GUI - High Performance C++")
 
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
     set(CMAKE_AUTOMOC ON)
@@ -25,23 +25,26 @@ if(WIN32)
     find_package(cv_bridge REQUIRED)
     find_package(OpenCV REQUIRED core imgproc)
 
-    add_executable(sanhum_gui
-        src/gui_main.cpp
-        src/main_window.cpp
-        src/joystick_widget.cpp
-        src/robot_view_widget.cpp
+    # High Performance C++ GUI Application
+    add_executable(sanhum_robot_gui_cpp
+        src/sanhum_robot_gui.cpp
+        src/motor_driver.cpp
+        src/esp32_driver.cpp
+        src/arduino_sensors.cpp
+        src/cameras.cpp
         src/gamepad_control.cpp
         src/wifi_server.cpp
+        src/yolo_detector.cpp
     )
 
-    target_compile_definitions(sanhum_gui PRIVATE PLATFORM_WINDOWS)
+    target_compile_definitions(sanhum_robot_gui_cpp PRIVATE PLATFORM_WINDOWS HIGH_PERFORMANCE)
 
-    target_include_directories(sanhum_gui PRIVATE
+    target_include_directories(sanhum_robot_gui_cpp PRIVATE
         include
         ${OpenCV_INCLUDE_DIRS}
     )
 
-    target_link_libraries(sanhum_gui PRIVATE
+    target_link_libraries(sanhum_robot_gui_cpp PRIVATE
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
@@ -49,7 +52,7 @@ if(WIN32)
         ${OpenCV_LIBS}
     )
 
-    ament_target_dependencies(sanhum_gui
+    ament_target_dependencies(sanhum_robot_gui_cpp
         rclcpp
         geometry_msgs
         nav_msgs
@@ -59,20 +62,58 @@ if(WIN32)
         cv_bridge
     )
 
-    install(TARGETS sanhum_gui DESTINATION lib/${PROJECT_NAME})
+    install(TARGETS sanhum_robot_gui_cpp DESTINATION lib/${PROJECT_NAME})
+
+    # Legacy Python GUI (for comparison)
+    add_executable(sanhum_gui
+        src/gui_main.cpp
+        src/main_window.cpp
+        src/joystick_widget.cpp
+        src/robot_view_widget.cpp
+    )
+
+    target_compile_definitions(sanhum_gui PRIVATE PLATFORM_WINDOWS LEGACY_GUI)
+
+    ament_target_dependencies(sanhum_gui
+        rclcpp
+        geometry_msgs
+        nav_msgs
+        sensor_msgs
+        std_msgs
+    )
 
 else()
     # --- Linux/PI Robot Build ---
-    message(STATUS "Configuring for Linux Robot")
+    message(STATUS "Configuring for Linux Robot - High Performance C++")
 
-    # In the future, you might need to find hardware-specific libraries here
-    # find_package(pigpio REQUIRED)
+    # High Performance C++ GUI Application
+    add_executable(sanhum_robot_gui_cpp
+        src/sanhum_robot_gui.cpp
+        src/motor_driver.cpp
+        src/esp32_driver.cpp
+        src/arduino_sensors.cpp
+        src/cameras.cpp
+        src/gamepad_control.cpp
+        src/wifi_server.cpp
+        src/yolo_detector.cpp
+    )
 
+    target_compile_definitions(sanhum_robot_gui_cpp PRIVATE PLATFORM_LINUX HIGH_PERFORMANCE)
+
+    target_include_directories(sanhum_robot_gui_cpp PRIVATE include)
+
+    ament_target_dependencies(sanhum_robot_gui_cpp
+        rclcpp
+        geometry_msgs
+        std_msgs
+        sensor_msgs
+    )
+
+    install(TARGETS sanhum_robot_gui_cpp DESTINATION lib/${PROJECT_NAME})
+
+    # Robot node
     add_executable(sanhum_robot
         src/robot_main.cpp
-        # src/motor_driver.cpp # To be added when implemented
-        # src/arduino_sensors.cpp # To be added when implemented
-        # src/esp32_driver.cpp # To be added when implemented
     )
 
     target_compile_definitions(sanhum_robot PRIVATE PLATFORM_LINUX PLATFORM_PI)
