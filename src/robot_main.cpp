@@ -36,30 +36,14 @@ int main(int argc, char *argv[]) {
     RCLCPP_INFO(node->get_logger(), "ESP32: port=%s, baud=%d", esp32_port.c_str(), esp32_baud_rate);
     RCLCPP_INFO(node->get_logger(), "Arduino Nano: port=%s, baud=%d", arduino_port.c_str(), arduino_baud_rate);
 
-    // Initialize hardware drivers (placeholders for now)
-    // sanhum::MotorDriver motor_driver(left_motor_1, left_motor_2, right_motor_1, right_motor_2);
-    // sanhum::ESP32Driver esp32_driver(esp32_port, esp32_baud_rate);
-    // sanhum::ArduinoSensors arduino_sensors(arduino_port, arduino_baud_rate);
+    // Initialize hardware drivers
+    auto motor_driver = std::make_shared<MotorDriver>(node);
+    auto esp32_driver = std::make_shared<Esp32Driver>(node);
+    auto arduino_sensors = std::make_shared<ArduinoSensors>(node);
 
-    // Create a subscriber for command velocity
-    auto cmd_vel_sub = node->create_subscription<sanhum::TwistMsg>(
-        sanhum::kCmdVelTopic,
-        10,
-        [/*&motor_driver*/](const sanhum::TwistMsg::SharedPtr msg) {
-            RCLCPP_INFO(rclcpp::get_logger("sanhum_robot_node"), "Received cmd_vel: linear.x=%.2f, angular.z=%.2f", msg->linear.x, msg->angular.z);
-            // motor_driver.set_speeds(msg->linear.x, msg->angular.z);
-        }
-    );
+    // Motor driver handles its own cmd_vel subscription internally
 
-    // Create publishers for sensor data
-    auto odom_pub = node->create_publisher<sanhum::OdometryMsg>(sanhum::kOdometryTopic, 10);
-    auto imu_pub = node->create_publisher<sanhum::ImuMsg>(sanhum::kImuTopic, 10);
-    auto arduino_sensors_pub = node->create_publisher<sanhum::Float32MultiArrayMsg>(sanhum::kArduinoSensorsTopic, 10);
-
-    // Example of publishing sensor data (in a real scenario, this would come from the sensors)
-    auto timer = node->create_wall_timer(std::chrono::seconds(1), [&]() {
-        // Here, you would get data from arduino_sensors, esp32_driver etc. and publish it.
-    });
+    // Hardware drivers handle their own publishers internally
 
     rclcpp::spin(node);
     rclcpp::shutdown();
