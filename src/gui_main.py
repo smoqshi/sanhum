@@ -817,7 +817,9 @@ class FullyIntegratedRobotGUI:
                 )
                 
         except Exception as e:
-            print(f"Command sending error: {e}")
+            # Don't print threading errors in main loop
+            if "main thread is not in main loop" not in str(e):
+                print(f"Command sending error: {e}")
             
     def stop_robot(self):
         """Stop robot movement"""
