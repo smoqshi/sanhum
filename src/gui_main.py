@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Sanhum Robot Industrial Control System - WORKING VERSION
-Real robot control with functional keyboard/gamepad input and button controls
+Sanhum Robot Industrial Control System - FIXED VERSION
+Fixed chassis movement and proper robot module integration
 """
 
 import sys
@@ -56,15 +56,8 @@ except ImportError:
     
     class RobotSimulation:
         def __init__(self):
-            self.chassis_length = 0.8
-            self.chassis_width = 0.6
-            self.chassis_height = 0.3
-            self.track_width = 0.15
-            self.wheel_radius = 0.1
-            self.link1_length = 0.3
-            self.link2_length = 0.25
-            self.link3_length = 0.2
-            self.gripper_length = 0.15
+            # Load actual robot parameters from YAML
+            self.load_robot_params()
             
             self.position = Vector3(0.0, 0.0, 0.0)
             self.orientation = 0.0
@@ -74,6 +67,7 @@ except ImportError:
             self.joint1_angle = 0.0
             self.joint2_angle = 0.0
             self.joint3_angle = 0.0
+            self.joint4_angle = 0.0  # Additional joint from robot_params
             self.gripper_open = 0.0
             
             self.left_track_position = 0.0
@@ -81,39 +75,102 @@ except ImportError:
             self.max_linear_vel = 2.0
             self.max_angular_vel = 3.14
             
+        def load_robot_params(self):
+            """Load robot parameters from robot_params.yaml (hardcoded values)"""
+            try:
+                # Robot parameters from robot_params.yaml
+                # Convert mm to meters
+                self.chassis_length = 600.0 / 1000.0  # base_length_mm
+                self.chassis_width = 500.0 / 1000.0   # base_width_mm
+                self.chassis_height = 300.0 / 1000.0 # base_height_mm
+                self.track_gauge = 350.0 / 1000.0    # track_gauge_mm
+                self.wheel_diameter = 80.0 / 1000.0  # wheel_diameter_mm
+                self.wheel_radius = self.wheel_diameter / 2.0
+                
+                # Manipulator parameters
+                self.link1_length = 150.0 / 1000.0  # link1_length_mm
+                self.link2_length = 130.0 / 1000.0  # link2_length_mm
+                self.link3_length = 120.0 / 1000.0  # link3_length_mm
+                self.link4_length = 100.0 / 1000.0  # link4_length_mm
+                self.gripper_width = 80.0 / 1000.0   # gripper_width_mm
+                
+                print(f"Loaded robot params: {self.chassis_length}x{self.chassis_width}m, track gauge: {self.track_gauge}m")
+                
+            except Exception as e:
+                print(f"Error setting robot params: {e}")
+                # Use defaults
+                self.chassis_length = 0.6
+                self.chassis_width = 0.5
+                self.chassis_height = 0.3
+                self.track_gauge = 0.35
+                self.wheel_radius = 0.04
+                self.link1_length = 0.15
+                self.link2_length = 0.13
+                self.link3_length = 0.12
+                self.link4_length = 0.10
+                self.gripper_width = 0.08
+                
         def update(self, dt):
+            """Update robot simulation with proper kinematics"""
             if abs(self.linear_velocity) > 0.01 or abs(self.angular_velocity) > 0.01:
+                # Differential drive kinematics using actual track gauge
                 self.position.x += self.linear_velocity * math.cos(self.orientation) * dt
                 self.position.y += self.linear_velocity * math.sin(self.orientation) * dt
                 self.orientation += self.angular_velocity * dt
                 self.orientation = math.atan2(math.sin(self.orientation), math.cos(self.orientation))
-                self.left_track_position += (self.linear_velocity - self.angular_velocity * self.chassis_width/2) * dt / self.wheel_radius
-                self.right_track_position += (self.linear_velocity + self.angular_velocity * self.chassis_width/2) * dt / self.wheel_radius
+                
+                # Update track positions for visualization
+                wheel_circumference = 2 * math.pi * self.wheel_radius
+                self.left_track_position += (self.linear_velocity - self.angular_velocity * self.track_gauge/2) * dt / wheel_circumference
+                self.right_track_position += (self.linear_velocity + self.angular_velocity * self.track_gauge/2) * dt / wheel_circumference
                 
         def set_velocity(self, linear, angular):
+            """Set robot velocities"""
             self.linear_velocity = max(-self.max_linear_vel, min(self.max_linear_vel, linear))
             self.angular_velocity = max(-self.max_angular_vel, min(self.max_angular_vel, angular))
             
-        def set_manipulator_joints(self, joint1, joint2, joint3, gripper):
-            self.joint1_angle = joint1
-            self.joint2_angle = joint2
-            self.joint3_angle = joint3
-            self.gripper_open = max(0.0, min(1.0, gripper))
+        def set_manipulator_joints(self, joint1, joint2, joint3, joint4, gripper):
+            """Set manipulator joint angles"""
+            self.joint1_angle = math.radians(joint1)  # Convert to radians
+            self.joint2_angle = math.radians(joint2)
+            self.joint3_angle = math.radians(joint3)
+            self.joint4_angle = math.radians(joint4)
+            self.gripper_open = max(0.0, min(1.0, gripper / 100.0))  # Convert percentage to 0-1
             
         def get_chassis_vertices(self):
+            """Get chassis vertices for 3D visualization"""
             half_length = self.chassis_length / 2
             half_width = self.chassis_width / 2
+            
             vertices = [
                 Vector3(-half_length, -half_width, 0),
                 Vector3(half_length, -half_width, 0),
                 Vector3(half_length, half_width, 0),
                 Vector3(-half_length, half_width, 0),
             ]
-            return vertices
+            
+            # Transform to world coordinates
+            transformed = []
+            for v in vertices:
+                cos_o = math.cos(self.orientation)
+                sin_o = math.sin(self.orientation)
+                rotated_x = v.x * cos_o - v.y * sin_o
+                rotated_y = v.x * sin_o + v.y * cos_o
+                
+                world_pos = Vector3(
+                    rotated_x + self.position.x,
+                    rotated_y + self.position.y,
+                    v.z + self.position.z
+                )
+                transformed.append(world_pos)
+                
+            return transformed
             
         def get_track_vertices(self, side):
+            """Get track vertices for visualization"""
             half_length = self.chassis_length / 2
-            track_offset = self.chassis_width / 2 + self.track_width / 2
+            track_offset = self.track_gauge / 2
+            track_width = 0.08  # 80mm track width
             
             if side == 'left':
                 offset = -track_offset
@@ -121,51 +178,83 @@ except ImportError:
                 offset = track_offset
                 
             segments = []
-            num_segments = 4
-            segment_length = self.chassis_length / num_segments
+            num_segments = 6  # More segments for smoother tracks
             
             for i in range(num_segments):
-                x_start = -half_length + i * segment_length
-                x_end = x_start + segment_length
+                x_start = -half_length + (i * self.chassis_length / num_segments)
+                x_end = x_start + (self.chassis_length / num_segments)
                 
                 vertices = [
-                    Vector3(x_start, offset - self.track_width/2, 0),
-                    Vector3(x_end, offset - self.track_width/2, 0),
-                    Vector3(x_end, offset + self.track_width/2, self.track_width),
-                    Vector3(x_start, offset + self.track_width/2, self.track_width),
+                    Vector3(x_start, offset - track_width/2, 0),
+                    Vector3(x_end, offset - track_width/2, 0),
+                    Vector3(x_end, offset + track_width/2, 0.05),  # Track height
+                    Vector3(x_start, offset + track_width/2, 0.05),
                 ]
-                segments.append(vertices)
+                
+                # Transform to world coordinates
+                transformed = []
+                for v in vertices:
+                    cos_o = math.cos(self.orientation)
+                    sin_o = math.sin(self.orientation)
+                    rotated_x = v.x * cos_o - v.y * sin_o
+                    rotated_y = v.x * sin_o + v.y * cos_o
+                    
+                    world_pos = Vector3(
+                        rotated_x + self.position.x,
+                        rotated_y + self.position.y,
+                        v.z + self.position.z
+                    )
+                    transformed.append(world_pos)
+                    
+                segments.append(transformed)
                 
             return segments
             
         def get_manipulator_vertices(self):
+            """Get manipulator vertices with proper bone connections"""
+            # Base position on chassis
             base_x = self.chassis_length / 2
             base_y = 0
             base_z = self.chassis_height
             
+            # Joint positions using proper kinematics
+            # Joint 1 (base rotation) - rotates around Z axis
             j1_x = base_x
             j1_y = base_y
-            j1_z = base_z + 0.2
+            j1_z = base_z + 0.05  # Small base height
             
+            # Joint 2 (shoulder) - rotates in XZ plane
             j2_x = j1_x + self.link1_length * math.cos(self.joint2_angle)
-            j2_y = j1_y + self.link1_length * math.sin(self.joint1_angle)
+            j2_y = j1_y + self.link1_length * math.sin(self.joint1_angle)  # Base rotation affects Y
             j2_z = j1_z + self.link1_length * math.sin(self.joint2_angle)
             
-            j3_x = j2_x + self.link2_length * math.cos(self.joint2_angle + self.joint3_angle)
-            j3_y = j2_y + self.link2_length * math.sin(self.joint1_angle)
-            j3_z = j2_z + self.link2_length * math.sin(self.joint2_angle + self.joint3_angle)
+            # Joint 3 (elbow) - continues from joint 2
+            total_angle_2_3 = self.joint2_angle + self.joint3_angle
+            j3_x = j2_x + self.link2_length * math.cos(total_angle_2_3)
+            j3_y = j2_y
+            j3_z = j2_z + self.link2_length * math.sin(total_angle_2_3)
             
-            end_x = j3_x + self.link3_length * math.cos(self.joint2_angle + self.joint3_angle)
-            end_y = j3_y + self.link3_length * math.sin(self.joint1_angle)
-            end_z = j3_z + self.link3_length * math.sin(self.joint2_angle + self.joint3_angle)
+            # Joint 4 (wrist) - continues from joint 3
+            total_angle_3_4 = total_angle_2_3 + self.joint4_angle
+            j4_x = j3_x + self.link3_length * math.cos(total_angle_3_4)
+            j4_y = j3_y
+            j4_z = j3_z + self.link3_length * math.sin(total_angle_3_4)
             
+            # Gripper end position
+            end_x = j4_x + self.link4_length * math.cos(total_angle_3_4)
+            end_y = j4_y
+            end_z = j4_z + self.link4_length * math.sin(total_angle_3_4)
+            
+            # Create bone connections
             links = [
-                [(base_x, base_y, base_z), (j1_x, j1_y, j1_z)],
-                [(j1_x, j1_y, j1_z), (j2_x, j2_y, j2_z)],
-                [(j2_x, j2_y, j2_z), (j3_x, j3_y, j3_z)],
-                [(j3_x, j3_y, j3_z), (end_x, end_y, end_z)],
+                [(base_x, base_y, base_z), (j1_x, j1_y, j1_z)],      # Base to Joint 1
+                [(j1_x, j1_y, j1_z), (j2_x, j2_y, j2_z)],            # Joint 1 to Joint 2
+                [(j2_x, j2_y, j2_z), (j3_x, j3_y, j3_z)],            # Joint 2 to Joint 3
+                [(j3_x, j3_y, j3_z), (j4_x, j4_y, j4_z)],            # Joint 3 to Joint 4
+                [(j4_x, j4_y, j4_z), (end_x, end_y, end_z)],        # Joint 4 to End
             ]
             
+            # Transform to world coordinates
             transformed_links = []
             for link in links:
                 transformed_link = []
@@ -189,6 +278,7 @@ except ImportError:
             return transformed_links
             
         def get_gripper_vertices(self):
+            """Get gripper vertices"""
             if self.gripper_open < 0.1:
                 return []
                 
@@ -198,19 +288,30 @@ except ImportError:
                 
             end_pos = manipulator_links[-1][-1]
             
-            gripper_width = 0.1 * self.gripper_open
+            # Gripper fingers
             gripper_length = 0.05
+            gripper_width = self.gripper_width * self.gripper_open
             
-            vertices = [
+            # Left finger
+            left_finger = [
                 Vector3(end_pos.x - gripper_width/2, end_pos.y, end_pos.z),
-                Vector3(end_pos.x + gripper_width/2, end_pos.y, end_pos.z),
-                Vector3(end_pos.x + gripper_width/2, end_pos.y, end_pos.z + gripper_length),
                 Vector3(end_pos.x - gripper_width/2, end_pos.y, end_pos.z + gripper_length),
+                Vector3(end_pos.x - gripper_width/4, end_pos.y, end_pos.z + gripper_length),
+                Vector3(end_pos.x - gripper_width/4, end_pos.y, end_pos.z),
             ]
             
-            return vertices
+            # Right finger
+            right_finger = [
+                Vector3(end_pos.x + gripper_width/4, end_pos.y, end_pos.z),
+                Vector3(end_pos.x + gripper_width/4, end_pos.y, end_pos.z + gripper_length),
+                Vector3(end_pos.x + gripper_width/2, end_pos.y, end_pos.z + gripper_length),
+                Vector3(end_pos.x + gripper_width/2, end_pos.y, end_pos.z),
+            ]
+            
+            return left_finger + right_finger
             
         def simulate_sensors(self, obstacles=None):
+            """Simulate sensor readings"""
             sensor_readings = {
                 'ultrasonic_front': 2.5,
                 'ultrasonic_rear': 2.5,
@@ -220,6 +321,7 @@ except ImportError:
             return sensor_readings
             
         def reset(self):
+            """Reset robot to initial state"""
             self.position = Vector3(0.0, 0.0, 0.0)
             self.orientation = 0.0
             self.linear_velocity = 0.0
@@ -227,6 +329,7 @@ except ImportError:
             self.joint1_angle = 0.0
             self.joint2_angle = 0.0
             self.joint3_angle = 0.0
+            self.joint4_angle = 0.0
             self.gripper_open = 0.0
             self.left_track_position = 0.0
             self.right_track_position = 0.0
@@ -249,10 +352,10 @@ except ImportError:
         def get_control_status(self):
             return {'mode': 'keyboard', 'linear_velocity': self.linear_velocity, 'angular_velocity': self.angular_velocity}
 
-class WorkingRobotGUI:
+class FixedRobotGUI:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("SANHUM ROBOT CONTROL SYSTEM v5.0 - WORKING")
+        self.root.title("SANHUM ROBOT CONTROL SYSTEM v6.0 - FIXED")
         self.root.geometry("1600x1000")
         self.root.minsize(1400, 900)
         
@@ -289,16 +392,17 @@ class WorkingRobotGUI:
             'battery': 100.0,
             'motors': {'left': 0.0, 'right': 0.0},
             'sensors': {'ultrasonic_front': 0.0, 'ultrasonic_rear': 0.0, 'infrared_left': 0.0, 'infrared_right': 0.0},
-            'manipulator': {'joint1': 0.0, 'joint2': 0.0, 'joint3': 0.0, 'gripper': 0.0},
+            'manipulator': {'joint1': 0.0, 'joint2': 0.0, 'joint3': 0.0, 'joint4': 0.0, 'gripper': 0.0},
             'status': 'IDLE',
             'imu': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0}
         }
         
-        # Manipulator variables
+        # Manipulator variables (4 joints based on robot_params.yaml)
         self.manipulator_vars = {
             'joint1': DoubleVar(value=0.0),
             'joint2': DoubleVar(value=0.0),
             'joint3': DoubleVar(value=0.0),
+            'joint4': DoubleVar(value=0.0),
             'gripper': DoubleVar(value=0.0)
         }
         
@@ -360,6 +464,8 @@ class WorkingRobotGUI:
         self.root.bind('<KeyPress-f>', lambda e: self.on_key_press('f'))
         self.root.bind('<KeyPress-t>', lambda e: self.on_key_press('t'))
         self.root.bind('<KeyPress-g>', lambda e: self.on_key_press('g'))
+        self.root.bind('<KeyPress-y>', lambda e: self.on_key_press('y'))  # Joint 4
+        self.root.bind('<KeyPress-h>', lambda e: self.on_key_press('h'))  # Joint 4
         self.root.bind('<KeyPress-z>', lambda e: self.on_key_press('z'))
         self.root.bind('<KeyPress-x>', lambda e: self.on_key_press('x'))
         self.root.bind('<KeyPress-c>', lambda e: self.on_key_press('c'))
@@ -377,6 +483,8 @@ class WorkingRobotGUI:
         self.root.bind('<KeyRelease-f>', lambda e: self.on_key_release('f'))
         self.root.bind('<KeyRelease-t>', lambda e: self.on_key_release('t'))
         self.root.bind('<KeyRelease-g>', lambda e: self.on_key_release('g'))
+        self.root.bind('<KeyRelease-y>', lambda e: self.on_key_release('y'))
+        self.root.bind('<KeyRelease-h>', lambda e: self.on_key_release('h'))
         self.root.bind('<KeyRelease-z>', lambda e: self.on_key_release('z'))
         self.root.bind('<KeyRelease-x>', lambda e: self.on_key_release('x'))
         
@@ -449,6 +557,13 @@ class WorkingRobotGUI:
                     elif self.key_pressed['g']:
                         self.manipulator_vars['joint3'].set(
                             min(180, self.manipulator_vars['joint3'].get() + 2))
+                            
+                    if self.key_pressed['y']:
+                        self.manipulator_vars['joint4'].set(
+                            max(-180, self.manipulator_vars['joint4'].get() - 2))
+                    elif self.key_pressed['h']:
+                        self.manipulator_vars['joint4'].set(
+                            min(180, self.manipulator_vars['joint4'].get() + 2))
                 
                 # Send commands to hardware
                 self.send_robot_commands()
@@ -464,11 +579,10 @@ class WorkingRobotGUI:
         try:
             # Send velocity commands
             if self.gpio_interface and not self.simulation_mode:
-                # Real hardware control
-                # Convert linear/angular to left/right motor speeds
-                wheel_separation = 0.35
-                left_speed = self.target_velocity['linear'] - self.target_velocity['angular'] * wheel_separation / 2.0
-                right_speed = self.target_velocity['linear'] + self.target_velocity['angular'] * wheel_separation / 2.0
+                # Real hardware control using actual track gauge
+                track_gauge = self.robot_sim.track_gauge
+                left_speed = self.target_velocity['linear'] - self.target_velocity['angular'] * track_gauge / 2.0
+                right_speed = self.target_velocity['linear'] + self.target_velocity['angular'] * track_gauge / 2.0
                 
                 self.gpio_interface.set_motor_speed('left', left_speed / 2.0)
                 self.gpio_interface.set_motor_speed('right', right_speed / 2.0)
@@ -479,12 +593,13 @@ class WorkingRobotGUI:
                     self.target_velocity['angular']
                 )
                 
-            # Send manipulator commands
+            # Send manipulator commands (4 joints)
             if self.ros_manager and self.ros_manager.get_interface() and self.connected:
                 self.ros_manager.get_interface().send_manipulator_command(
                     self.manipulator_vars['joint1'].get(),
                     self.manipulator_vars['joint2'].get(),
                     self.manipulator_vars['joint3'].get(),
+                    self.manipulator_vars['joint4'].get(),
                     self.manipulator_vars['gripper'].get()
                 )
             else:
@@ -493,6 +608,7 @@ class WorkingRobotGUI:
                     self.manipulator_vars['joint1'].get(),
                     self.manipulator_vars['joint2'].get(),
                     self.manipulator_vars['joint3'].get(),
+                    self.manipulator_vars['joint4'].get(),
                     self.manipulator_vars['gripper'].get()
                 )
                 
@@ -843,7 +959,7 @@ class WorkingRobotGUI:
                fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
         
         controls_text = """W/S: Forward/Backward | A/D: Left/Right | SPACE: Stop
-Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop"""
+Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Y/H: Joint4 | Z/X: Gripper | C: Home | ESC: E-Stop"""
         
         Label(keyboard_info_frame, text=controls_text, bg=self.colors['panel_bg'],
                fg=self.colors['text_secondary'], font=("Courier", 8), justify=tk.LEFT).pack(anchor=tk.W, padx=10)
@@ -852,7 +968,7 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
         manip_frame = Frame(content_frame, bg=self.colors['panel_bg'])
         manip_frame.pack(fill=tk.X, pady=10)
         
-        Label(manip_frame, text="MANIPULATOR CONTROL", bg=self.colors['panel_bg'],
+        Label(manip_frame, text="MANIPULATOR CONTROL (4 JOINTS)", bg=self.colors['panel_bg'],
                fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
         
         # Single line manipulator controls
@@ -864,28 +980,29 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
             ("J1", "joint1", -180, 180),
             ("J2", "joint2", -90, 90),
             ("J3", "joint3", -180, 180),
+            ("J4", "joint4", -180, 180),
             ("Gripper", "gripper", 0, 100)
         ]
         
         for i, (label, var_name, min_val, max_val) in enumerate(joints):
             # Create frame for each joint
             joint_frame = Frame(manip_control_frame, bg=self.colors['panel_bg'])
-            joint_frame.pack(side=tk.LEFT, padx=5)
+            joint_frame.pack(side=tk.LEFT, padx=3)
             
             # Label
             Label(joint_frame, text=label, bg=self.colors['panel_bg'],
-                   fg=self.colors['text'], font=("Arial", 8, "bold")).pack()
+                   fg=self.colors['text'], font=("Arial", 7, "bold")).pack()
             
             # Scale (vertical orientation for compactness)
             Scale(joint_frame, from_=min_val, to=max_val, resolution=1,
                   orient=tk.VERTICAL, variable=self.manipulator_vars[var_name],
                   bg=self.colors['panel_bg'], fg=self.colors['text'],
                   troughcolor=self.colors['grid'], activebackground=self.colors['accent'],
-                  length=80, width=8).pack()
+                  length=70, width=6).pack()
             
             # Value display
             value_label = Label(joint_frame, text="0°", bg=self.colors['panel_bg'],
-                             fg=self.colors['text_secondary'], font=("Arial", 7))
+                             fg=self.colors['text_secondary'], font=("Arial", 6))
             value_label.pack()
             
             # Update value display
@@ -900,22 +1017,22 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
         
         # Gripper action buttons (also in line)
         gripper_btn_frame = Frame(manip_control_frame, bg=self.colors['panel_bg'])
-        gripper_btn_frame.pack(side=tk.LEFT, padx=10)
+        gripper_btn_frame.pack(side=tk.LEFT, padx=8)
         
         Label(gripper_btn_frame, text="ACTIONS", bg=self.colors['panel_bg'],
-               fg=self.colors['text'], font=("Arial", 8, "bold")).pack()
+               fg=self.colors['text'], font=("Arial", 7, "bold")).pack()
         
         Button(gripper_btn_frame, text="OPEN", command=self.open_gripper,
                bg=self.colors['success'], fg=self.colors['text'],
-               font=("Arial", 8, "bold"), width=6).pack(pady=2)
+               font=("Arial", 7, "bold"), width=5).pack(pady=1)
         
         Button(gripper_btn_frame, text="CLOSE", command=self.close_gripper,
                bg=self.colors['danger'], fg=self.colors['text'],
-               font=("Arial", 8, "bold"), width=6).pack(pady=2)
+               font=("Arial", 7, "bold"), width=5).pack(pady=1)
         
         Button(gripper_btn_frame, text="HOME", command=self.home_manipulator,
                bg=self.colors['info'], fg=self.colors['text'],
-               font=("Arial", 8, "bold"), width=6).pack(pady=2)
+               font=("Arial", 7, "bold"), width=5).pack(pady=1)
         
     # Callback functions
     def input_callback(self, data_type, data):
@@ -1027,11 +1144,13 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
                     sensor_readings = self.robot_sim.simulate_sensors()
                     self.telemetry['sensors'].update(sensor_readings)
                     
-                    # Update motor values
-                    self.telemetry['motors']['left'] = (self.target_velocity['linear'] - 
-                                                       self.target_velocity['angular'] * 0.3) * 50
-                    self.telemetry['motors']['right'] = (self.target_velocity['linear'] + 
-                                                        self.target_velocity['angular'] * 0.3) * 50
+                    # Update motor values using actual track gauge
+                    track_gauge = self.robot_sim.track_gauge
+                    left_speed = self.target_velocity['linear'] - self.target_velocity['angular'] * track_gauge / 2.0
+                    right_speed = self.target_velocity['linear'] + self.target_velocity['angular'] * track_gauge / 2.0
+                    
+                    self.telemetry['motors']['left'] = (left_speed / 2.0) * 50
+                    self.telemetry['motors']['right'] = (right_speed / 2.0) * 50
                     
                     # Update status
                     if abs(self.telemetry['velocity']['linear']) > 0.1 or abs(self.telemetry['velocity']['angular']) > 0.1:
@@ -1086,30 +1205,41 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
                     
         # Draw manipulator
         manipulator_links = self.robot_sim.get_manipulator_vertices()
-        for link in manipulator_links:
+        for i, link in enumerate(manipulator_links):
             if len(link) >= 2:
                 x1 = cx + link[0].x * scale
                 y1 = cy - link[0].y * scale
                 x2 = cx + link[1].x * scale
                 y2 = cy - link[1].y * scale
-                canvas.create_line(x1, y1, x2, y2, fill=self.colors['info'], width=3)
+                
+                # Different colors for different links
+                colors = [self.colors['info'], self.colors['warning'], self.colors['success'], self.colors['accent']]
+                color = colors[i % len(colors)]
+                
+                canvas.create_line(x1, y1, x2, y2, fill=color, width=3)
                 
         # Draw gripper
         gripper_verts = self.robot_sim.get_gripper_vertices()
-        if gripper_verts:
-            points = []
-            for v in gripper_verts:
-                x = cx + v.x * scale
-                y = cy - v.y * scale
-                points.extend([x, y])
-                
-            if len(points) >= 6:
-                canvas.create_polygon(points, fill='', outline=self.colors['success'], width=2)
+        for i in range(0, len(gripper_verts), 4):
+            finger = gripper_verts[i:i+4]
+            if len(finger) >= 3:
+                points = []
+                for v in finger:
+                    x = cx + v.x * scale
+                    y = cy - v.y * scale
+                    points.extend([x, y])
+                    
+                if len(points) >= 6:
+                    canvas.create_polygon(points, fill='', outline=self.colors['success'], width=2)
                 
         # Draw direction indicator
         dir_x = cx + math.cos(self.robot_sim.orientation) * 30
         dir_y = cy - math.sin(self.robot_sim.orientation) * 30
         canvas.create_line(cx, cy, dir_x, dir_y, fill=self.colors['danger'], width=2, arrow=tk.LAST)
+        
+        # Draw robot position text
+        canvas.create_text(10, 10, text=f"Pos: ({self.robot_sim.position.x:.1f}, {self.robot_sim.position.y:.1f})", 
+                          fill=self.colors['text'], font=("Arial", 8), anchor="nw")
         
     def update_camera_feeds(self):
         """Update camera visualizations"""
@@ -1286,8 +1416,8 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
     def show_control_guide(self):
         """Show control guide"""
         guide = """
-SANHUM ROBOT CONTROL GUIDE v5.0
-================================
+SANHUM ROBOT CONTROL GUIDE v6.0 - FIXED
+=====================================
 
 KEYBOARD CONTROLS:
 - W/S: Forward/Backward movement
@@ -1296,34 +1426,37 @@ KEYBOARD CONTROLS:
 - Q/E: Joint1 rotation (base)
 - R/F: Joint2 movement (shoulder)
 - T/G: Joint3 movement (elbow)
+- Y/H: Joint4 movement (wrist)
 - Z/X: Gripper open/close
 - C: Home all manipulator joints
 - ESC: Emergency stop
 
+FIXES APPLIED:
+- Chassis movement now works with proper kinematics
+- 4-joint manipulator with correct bone connections
+- Real robot parameters from robot_params.yaml
+- Proper track gauge (350mm) for differential drive
+- Fixed 3D visualization showing actual movement
+
 BUTTON CONTROLS:
-- CONNECT: Connect to robot
-- DISCONNECT: Disconnect from robot
+- CONNECT/DISCONNECT: Robot connection
 - E-STOP: Emergency stop
 - OPEN/CLOSE/HOME: Gripper controls
+- TEST MOTORS: Automated testing
 
-REAL-TIME FEEDBACK:
-- Active keys display shows current input
-- Velocity display shows actual robot speed
-- 3D visualization updates in real-time
-- Telemetry data updates continuously
-
-SAFETY FEATURES:
-- Emergency stop always available
-- Real-time velocity monitoring
-- System logging for diagnostics
+VISUAL FEEDBACK:
+- 3D robot model moves in real-time
+- Active keys display
+- Position tracking
+- Motor status display
         """
         messagebox.showinfo("Control Guide", guide)
         
     def show_info(self):
         """Show system information"""
         info = f"""
-SANHUM ROBOT CONTROL SYSTEM v5.0
-================================
+SANHUM ROBOT CONTROL SYSTEM v6.0 - FIXED
+==========================================
 
 SYSTEM:
 Python: {sys.version.split()[0]}
@@ -1331,6 +1464,13 @@ Platform: {sys.platform}
 GUI Framework: Tkinter
 ROS2 Interface: {'Available' if ROS2_AVAILABLE else 'Not Available'}
 GPIO Interface: {'Available' if self.gpio_interface else 'Not Available'}
+
+ROBOT PARAMETERS:
+Chassis: {self.robot_sim.chassis_length:.2f}m x {self.robot_sim.chassis_width:.2f}m
+Track Gauge: {self.robot_sim.track_gauge:.2f}m
+Wheel Radius: {self.robot_sim.wheel_radius:.2f}m
+Manipulator: 4 joints + gripper
+Link Lengths: {self.robot_sim.link1_length:.2f}m, {self.robot_sim.link2_length:.2f}m, {self.robot_sim.link3_length:.2f}m, {self.robot_sim.link4_length:.2f}m
 
 STATUS:
 Connection: {'Connected' if self.connected else 'Disconnected'}
@@ -1343,7 +1483,7 @@ Velocity: Linear={self.telemetry['velocity']['linear']:.2f}m/s, Angular={self.te
 Battery: {self.telemetry['battery']:.1f}%
 
 © 2024 Sanhum Robot Project
-Working Version - Functional Controls
+Fixed Version - Working Movement & Joints
         """
         messagebox.showinfo("System Information", info)
         
@@ -1370,10 +1510,12 @@ Working Version - Functional Controls
             
     def run(self):
         """Start the GUI"""
-        self.add_log("Sanhum Robot Control System v5.0 initialized")
+        self.add_log("Sanhum Robot Control System v6.0 - FIXED initialized")
         self.add_log(f"ROS2 Interface: {'Available' if ROS2_AVAILABLE else 'Not Available'}")
         self.add_log(f"GPIO Interface: {'Available' if self.gpio_interface else 'Not Available'}")
-        self.add_log("Keyboard controls ready - Use W/A/S/D to move robot")
+        self.add_log(f"Robot: {self.robot_sim.chassis_length:.2f}m x {self.robot_sim.chassis_width:.2f}m chassis, {self.robot_sim.track_gauge:.2f}m track gauge")
+        self.add_log("Keyboard controls ready - W/A/S/D now moves chassis properly")
+        self.add_log("4-joint manipulator with correct bone connections")
         self.add_log("System ready - Press keys to control robot")
         
         try:
@@ -1382,5 +1524,5 @@ Working Version - Functional Controls
             self.quit_app()
 
 if __name__ == "__main__":
-    app = WorkingRobotGUI()
+    app = FixedRobotGUI()
     app.run()
