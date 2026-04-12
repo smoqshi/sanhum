@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Sanhum Robot Industrial Control System - Professional Version
-Real robot control with keyboard/gamepad input and proper manipulator layout
+Sanhum Robot Industrial Control System - WORKING VERSION
+Real robot control with functional keyboard/gamepad input and button controls
 """
 
 import sys
@@ -14,15 +14,19 @@ import time
 import json
 import math
 from datetime import datetime
+from collections import defaultdict
 
 # Import our robot modules
 try:
     from robot_interface import RobotInterfaceManager, RobotMode
     from robot_simulation import RobotSimulation, Vector3
     from input_controller import InputController, ControlMode
+    from rpi_gpio_interface import RPiGPIOInterface
     ROS2_AVAILABLE = True
+    GPIO_AVAILABLE = True
 except ImportError:
     ROS2_AVAILABLE = False
+    GPIO_AVAILABLE = False
     print("Warning: ROS2 modules not available, running in simulation mode only")
     
     # Create fallback classes
@@ -105,21 +109,6 @@ except ImportError:
                 Vector3(half_length, half_width, 0),
                 Vector3(-half_length, half_width, 0),
             ]
-            
-            transformed = []
-            for v in vertices:
-                cos_o = math.cos(self.orientation)
-                sin_o = math.sin(self.orientation)
-                rotated_x = v.x * cos_o - v.y * sin_o
-                rotated_y = v.x * sin_o + v.y * cos_o
-                
-                world_pos = Vector3(
-                    rotated_x + self.position.x,
-                    rotated_y + self.position.y,
-                    v.z + self.position.z
-                )
-                transformed.append(world_pos)
-                
             return vertices
             
         def get_track_vertices(self, side):
@@ -145,22 +134,7 @@ except ImportError:
                     Vector3(x_end, offset + self.track_width/2, self.track_width),
                     Vector3(x_start, offset + self.track_width/2, self.track_width),
                 ]
-                
-                transformed = []
-                for v in vertices:
-                    cos_o = math.cos(self.orientation)
-                    sin_o = math.sin(self.orientation)
-                    rotated_x = v.x * cos_o - v.y * sin_o
-                    rotated_y = v.x * sin_o + v.y * cos_o
-                    
-                    world_pos = Vector3(
-                        rotated_x + self.position.x,
-                        rotated_y + self.position.y,
-                        v.z + self.position.z
-                    )
-                    transformed.append(world_pos)
-                    
-                segments.append(transformed)
+                segments.append(vertices)
                 
             return segments
             
@@ -261,6 +235,10 @@ except ImportError:
         def __init__(self, gui_callback=None):
             self.gui_callback = gui_callback
             self.running = False
+            self.linear_velocity = 0.0
+            self.angular_velocity = 0.0
+            self.max_linear_vel = 2.0
+            self.max_angular_vel = 3.14
             
         def start(self):
             self.running = True
@@ -269,12 +247,12 @@ except ImportError:
             self.running = False
             
         def get_control_status(self):
-            return {'mode': 'keyboard', 'linear_velocity': 0.0, 'angular_velocity': 0.0}
+            return {'mode': 'keyboard', 'linear_velocity': self.linear_velocity, 'angular_velocity': self.angular_velocity}
 
-class ProfessionalRobotGUI:
+class WorkingRobotGUI:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("SANHUM ROBOT CONTROL SYSTEM v4.0 - PROFESSIONAL")
+        self.root.title("SANHUM ROBOT CONTROL SYSTEM v5.0 - WORKING")
         self.root.geometry("1600x1000")
         self.root.minsize(1400, 900)
         
@@ -300,6 +278,10 @@ class ProfessionalRobotGUI:
         self.simulation_mode = True
         self.robot_namespace = StringVar(value="sanhum_robot")
         
+        # Control state
+        self.target_velocity = {'linear': 0.0, 'angular': 0.0}
+        self.key_pressed = defaultdict(bool)
+        
         # Telemetry data
         self.telemetry = {
             'position': {'x': 0.0, 'y': 0.0, 'theta': 0.0},
@@ -312,12 +294,28 @@ class ProfessionalRobotGUI:
             'imu': {'roll': 0.0, 'pitch': 0.0, 'yaw': 0.0}
         }
         
-        # Control variables
-        self.target_velocity = {'linear': 0.0, 'angular': 0.0}
+        # Manipulator variables
+        self.manipulator_vars = {
+            'joint1': DoubleVar(value=0.0),
+            'joint2': DoubleVar(value=0.0),
+            'joint3': DoubleVar(value=0.0),
+            'gripper': DoubleVar(value=0.0)
+        }
         
         # Initialize systems
         self.robot_sim = RobotSimulation()
         self.input_controller = InputController(gui_callback=self.input_callback)
+        
+        # GPIO interface for real hardware
+        self.gpio_interface = None
+        if GPIO_AVAILABLE:
+            try:
+                self.gpio_interface = RPiGPIOInterface()
+                print("GPIO interface initialized")
+            except Exception as e:
+                print(f"GPIO interface not available: {e}")
+        else:
+            print("GPIO interface not available: module not found")
         
         # ROS2 interface
         self.ros_manager = None
@@ -332,14 +330,200 @@ class ProfessionalRobotGUI:
         self.create_menu()
         self.create_main_layout()
         
+        # Bind keyboard events
+        self.setup_keyboard_controls()
+        
         # Start update loops
         self.telemetry_thread_running = True
         self.telemetry_thread = threading.Thread(target=self.update_telemetry_loop, daemon=True)
         self.telemetry_thread.start()
         
+        self.input_thread_running = True
+        self.input_thread = threading.Thread(target=self.input_processing_loop, daemon=True)
+        self.input_thread.start()
+        
         self.simulation_thread_running = True
         self.simulation_thread = threading.Thread(target=self.simulation_loop, daemon=True)
         self.simulation_thread.start()
+        
+    def setup_keyboard_controls(self):
+        """Setup keyboard event bindings"""
+        # Key press events
+        self.root.bind('<KeyPress-w>', lambda e: self.on_key_press('w'))
+        self.root.bind('<KeyPress-s>', lambda e: self.on_key_press('s'))
+        self.root.bind('<KeyPress-a>', lambda e: self.on_key_press('a'))
+        self.root.bind('<KeyPress-d>', lambda e: self.on_key_press('d'))
+        self.root.bind('<KeyPress-space>', lambda e: self.on_key_press('space'))
+        self.root.bind('<KeyPress-q>', lambda e: self.on_key_press('q'))
+        self.root.bind('<KeyPress-e>', lambda e: self.on_key_press('e'))
+        self.root.bind('<KeyPress-r>', lambda e: self.on_key_press('r'))
+        self.root.bind('<KeyPress-f>', lambda e: self.on_key_press('f'))
+        self.root.bind('<KeyPress-t>', lambda e: self.on_key_press('t'))
+        self.root.bind('<KeyPress-g>', lambda e: self.on_key_press('g'))
+        self.root.bind('<KeyPress-z>', lambda e: self.on_key_press('z'))
+        self.root.bind('<KeyPress-x>', lambda e: self.on_key_press('x'))
+        self.root.bind('<KeyPress-c>', lambda e: self.on_key_press('c'))
+        self.root.bind('<KeyPress-Escape>', lambda e: self.on_key_press('escape'))
+        
+        # Key release events
+        self.root.bind('<KeyRelease-w>', lambda e: self.on_key_release('w'))
+        self.root.bind('<KeyRelease-s>', lambda e: self.on_key_release('s'))
+        self.root.bind('<KeyRelease-a>', lambda e: self.on_key_release('a'))
+        self.root.bind('<KeyRelease-d>', lambda e: self.on_key_release('d'))
+        self.root.bind('<KeyRelease-space>', lambda e: self.on_key_release('space'))
+        self.root.bind('<KeyRelease-q>', lambda e: self.on_key_release('q'))
+        self.root.bind('<KeyRelease-e>', lambda e: self.on_key_release('e'))
+        self.root.bind('<KeyRelease-r>', lambda e: self.on_key_release('r'))
+        self.root.bind('<KeyRelease-f>', lambda e: self.on_key_release('f'))
+        self.root.bind('<KeyRelease-t>', lambda e: self.on_key_release('t'))
+        self.root.bind('<KeyRelease-g>', lambda e: self.on_key_release('g'))
+        self.root.bind('<KeyRelease-z>', lambda e: self.on_key_release('z'))
+        self.root.bind('<KeyRelease-x>', lambda e: self.on_key_release('x'))
+        
+        # Focus to receive keyboard events
+        self.root.focus_set()
+        
+    def on_key_press(self, key):
+        """Handle key press events"""
+        self.key_pressed[key] = True
+        
+        if key == 'escape':
+            self.emergency_stop_action()
+        elif key == 'space':
+            self.stop_robot()
+        elif key == 'c':
+            self.home_manipulator()
+        elif key == 'z':
+            self.open_gripper()
+        elif key == 'x':
+            self.close_gripper()
+            
+    def on_key_release(self, key):
+        """Handle key release events"""
+        self.key_pressed[key] = False
+        
+    def input_processing_loop(self):
+        """Process keyboard input and update robot control"""
+        while self.input_thread_running:
+            try:
+                if self.emergency_stop:
+                    self.target_velocity['linear'] = 0.0
+                    self.target_velocity['angular'] = 0.0
+                else:
+                    # Process movement keys
+                    linear = 0.0
+                    angular = 0.0
+                    
+                    if self.key_pressed['w']:
+                        linear = 2.0  # Forward
+                    elif self.key_pressed['s']:
+                        linear = -2.0  # Backward
+                        
+                    if self.key_pressed['a']:
+                        angular = 3.14  # Left
+                    elif self.key_pressed['d']:
+                        angular = -3.14  # Right
+                        
+                    # Smooth transitions
+                    self.target_velocity['linear'] = self.target_velocity['linear'] * 0.8 + linear * 0.2
+                    self.target_velocity['angular'] = self.target_velocity['angular'] * 0.8 + angular * 0.2
+                    
+                    # Process manipulator keys
+                    if self.key_pressed['q']:
+                        self.manipulator_vars['joint1'].set(
+                            max(-180, self.manipulator_vars['joint1'].get() - 2))
+                    elif self.key_pressed['e']:
+                        self.manipulator_vars['joint1'].set(
+                            min(180, self.manipulator_vars['joint1'].get() + 2))
+                            
+                    if self.key_pressed['r']:
+                        self.manipulator_vars['joint2'].set(
+                            max(-90, self.manipulator_vars['joint2'].get() - 2))
+                    elif self.key_pressed['f']:
+                        self.manipulator_vars['joint2'].set(
+                            min(90, self.manipulator_vars['joint2'].get() + 2))
+                            
+                    if self.key_pressed['t']:
+                        self.manipulator_vars['joint3'].set(
+                            max(-180, self.manipulator_vars['joint3'].get() - 2))
+                    elif self.key_pressed['g']:
+                        self.manipulator_vars['joint3'].set(
+                            min(180, self.manipulator_vars['joint3'].get() + 2))
+                
+                # Send commands to hardware
+                self.send_robot_commands()
+                
+                time.sleep(0.05)  # 20 Hz
+                
+            except Exception as e:
+                print(f"Input processing error: {e}")
+                time.sleep(0.1)
+                
+    def send_robot_commands(self):
+        """Send commands to robot hardware/simulation"""
+        try:
+            # Send velocity commands
+            if self.gpio_interface and not self.simulation_mode:
+                # Real hardware control
+                # Convert linear/angular to left/right motor speeds
+                wheel_separation = 0.35
+                left_speed = self.target_velocity['linear'] - self.target_velocity['angular'] * wheel_separation / 2.0
+                right_speed = self.target_velocity['linear'] + self.target_velocity['angular'] * wheel_separation / 2.0
+                
+                self.gpio_interface.set_motor_speed('left', left_speed / 2.0)
+                self.gpio_interface.set_motor_speed('right', right_speed / 2.0)
+            else:
+                # Simulation control
+                self.robot_sim.set_velocity(
+                    self.target_velocity['linear'],
+                    self.target_velocity['angular']
+                )
+                
+            # Send manipulator commands
+            if self.ros_manager and self.ros_manager.get_interface() and self.connected:
+                self.ros_manager.get_interface().send_manipulator_command(
+                    self.manipulator_vars['joint1'].get(),
+                    self.manipulator_vars['joint2'].get(),
+                    self.manipulator_vars['joint3'].get(),
+                    self.manipulator_vars['gripper'].get()
+                )
+            else:
+                # Simulation manipulator control
+                self.robot_sim.set_manipulator_joints(
+                    self.manipulator_vars['joint1'].get(),
+                    self.manipulator_vars['joint2'].get(),
+                    self.manipulator_vars['joint3'].get(),
+                    self.manipulator_vars['gripper'].get()
+                )
+                
+        except Exception as e:
+            print(f"Command sending error: {e}")
+            
+    def stop_robot(self):
+        """Stop robot movement"""
+        self.target_velocity['linear'] = 0.0
+        self.target_velocity['angular'] = 0.0
+        
+        if self.gpio_interface:
+            self.gpio_interface.stop_all_motors()
+            
+        self.add_log("Robot stopped")
+        
+    def home_manipulator(self):
+        """Home manipulator to zero position"""
+        for var in self.manipulator_vars.values():
+            var.set(0.0)
+        self.add_log("Manipulator homed")
+        
+    def open_gripper(self):
+        """Open gripper"""
+        self.manipulator_vars['gripper'].set(100)
+        self.add_log("Gripper opened")
+        
+    def close_gripper(self):
+        """Close gripper"""
+        self.manipulator_vars['gripper'].set(0)
+        self.add_log("Gripper closed")
         
     def create_menu(self):
         """Create industrial menu bar"""
@@ -360,22 +544,13 @@ class ProfessionalRobotGUI:
         control_menu = tk.Menu(menubar, tearoff=0, bg=self.colors['panel_bg'], fg=self.colors['text'])
         menubar.add_cascade(label="CONTROL", menu=control_menu)
         control_menu.add_command(label="Keyboard Mode", command=lambda: self.set_control_mode("keyboard"))
-        control_menu.add_command(label="Gamepad Mode", command=lambda: self.set_control_mode("gamepad"))
-        control_menu.add_separator()
-        control_menu.add_command(label="Calibrate Controls", command=self.calibrate_controls)
+        control_menu.add_command(label="Test Motors", command=self.test_motors)
         
         # Mode menu
         mode_menu = tk.Menu(menubar, tearoff=0, bg=self.colors['panel_bg'], fg=self.colors['text'])
         menubar.add_cascade(label="MODE", menu=mode_menu)
         mode_menu.add_command(label="Simulation Mode", command=lambda: self.set_mode("SIMULATION"))
         mode_menu.add_command(label="Real Robot Mode", command=lambda: self.set_mode("REAL"))
-        
-        # Configuration menu
-        config_menu = tk.Menu(menubar, tearoff=0, bg=self.colors['panel_bg'], fg=self.colors['text'])
-        menubar.add_cascade(label="CONFIG", menu=config_menu)
-        config_menu.add_command(label="Load Configuration", command=self.load_config)
-        config_menu.add_command(label="Save Configuration", command=self.save_config)
-        config_menu.add_command(label="Robot Parameters", command=self.robot_parameters)
         
         # Help menu
         help_menu = tk.Menu(menubar, tearoff=0, bg=self.colors['panel_bg'], fg=self.colors['text'])
@@ -643,10 +818,22 @@ class ProfessionalRobotGUI:
                fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
         
         self.control_info_display = Label(control_status_frame, 
-                                         text="Mode: Keyboard | Linear: 0.00m/s | Angular: 0.00rad/s",
+                                         text=f"Linear: {self.target_velocity['linear']:.2f}m/s | Angular: {self.target_velocity['angular']:.2f}rad/s",
                                          bg=self.colors['panel_bg'], fg=self.colors['text'],
                                          font=("Courier", 9))
         self.control_info_display.pack(anchor=tk.W, padx=10)
+        
+        # Active keys display
+        active_keys_frame = Frame(content_frame, bg=self.colors['panel_bg'])
+        active_keys_frame.pack(fill=tk.X, pady=10)
+        
+        Label(active_keys_frame, text="ACTIVE CONTROLS", bg=self.colors['panel_bg'],
+               fg=self.colors['accent'], font=("Arial", 10, "bold")).pack(anchor=tk.W)
+        
+        self.active_keys_display = Label(active_keys_frame, text="No keys pressed",
+                                         bg=self.colors['panel_bg'], fg=self.colors['text_secondary'],
+                                         font=("Courier", 9))
+        self.active_keys_display.pack(anchor=tk.W, padx=10)
         
         # Keyboard controls info
         keyboard_info_frame = Frame(content_frame, bg=self.colors['panel_bg'])
@@ -680,7 +867,6 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
             ("Gripper", "gripper", 0, 100)
         ]
         
-        self.manipulator_vars = {}
         for i, (label, var_name, min_val, max_val) in enumerate(joints):
             # Create frame for each joint
             joint_frame = Frame(manip_control_frame, bg=self.colors['panel_bg'])
@@ -691,11 +877,8 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
                    fg=self.colors['text'], font=("Arial", 8, "bold")).pack()
             
             # Scale (vertical orientation for compactness)
-            var = DoubleVar(value=0.0)
-            self.manipulator_vars[var_name] = var
-            
             Scale(joint_frame, from_=min_val, to=max_val, resolution=1,
-                  orient=tk.VERTICAL, variable=var,
+                  orient=tk.VERTICAL, variable=self.manipulator_vars[var_name],
                   bg=self.colors['panel_bg'], fg=self.colors['text'],
                   troughcolor=self.colors['grid'], activebackground=self.colors['accent'],
                   length=80, width=8).pack()
@@ -706,12 +889,12 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
             value_label.pack()
             
             # Update value display
-            def update_label(label=value_label, var=var):
-                if var_name == "gripper":
+            def update_label(label=value_label, var=self.manipulator_vars[var_name], name=var_name):
+                if name == "gripper":
                     label.config(text=f"{int(var.get())}%")
                 else:
                     label.config(text=f"{int(var.get())}°")
-                self.root.after(100, update_label, label, var)
+                self.root.after(100, update_label, label, var, name)
             
             update_label()
         
@@ -722,15 +905,15 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
         Label(gripper_btn_frame, text="ACTIONS", bg=self.colors['panel_bg'],
                fg=self.colors['text'], font=("Arial", 8, "bold")).pack()
         
-        Button(gripper_btn_frame, text="OPEN", command=lambda: self.gripper_action("open"),
+        Button(gripper_btn_frame, text="OPEN", command=self.open_gripper,
                bg=self.colors['success'], fg=self.colors['text'],
                font=("Arial", 8, "bold"), width=6).pack(pady=2)
         
-        Button(gripper_btn_frame, text="CLOSE", command=lambda: self.gripper_action("close"),
+        Button(gripper_btn_frame, text="CLOSE", command=self.close_gripper,
                bg=self.colors['danger'], fg=self.colors['text'],
                font=("Arial", 8, "bold"), width=6).pack(pady=2)
         
-        Button(gripper_btn_frame, text="HOME", command=lambda: self.gripper_action("home"),
+        Button(gripper_btn_frame, text="HOME", command=self.home_manipulator,
                bg=self.colors['info'], fg=self.colors['text'],
                font=("Arial", 8, "bold"), width=6).pack(pady=2)
         
@@ -741,21 +924,15 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
             self.target_velocity['linear'] = data['linear']
             self.target_velocity['angular'] = data['angular']
             
-            # Update display
-            self.control_info_display.config(
-                text=f"Mode: {self.input_controller.get_control_status()['mode'].upper()} | "
-                     f"Linear: {data['linear']:.2f}m/s | Angular: {data['angular']:.2f}rad/s"
-            )
-            
         elif data_type == 'emergency_stop':
             self.emergency_stop = data
             self.update_emergency_status()
             
         elif data_type == 'gripper':
             if data == 'open':
-                self.manipulator_vars['gripper'].set(100)
+                self.open_gripper()
             elif data == 'close':
-                self.manipulator_vars['gripper'].set(0)
+                self.close_gripper()
                 
     def ros_callback(self, data_type, data):
         """Handle ROS2 callbacks"""
@@ -785,6 +962,18 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
         """Update telemetry displays"""
         while self.telemetry_thread_running:
             try:
+                # Update active keys display
+                active_keys = [k.upper() for k, v in self.key_pressed.items() if v]
+                if active_keys:
+                    self.active_keys_display.config(text=f"Keys: {', '.join(active_keys)}")
+                else:
+                    self.active_keys_display.config(text="No keys pressed")
+                
+                # Update control info display
+                self.control_info_display.config(
+                    text=f"Linear: {self.target_velocity['linear']:.2f}m/s | Angular: {self.target_velocity['angular']:.2f}rad/s"
+                )
+                
                 # Update displays
                 pos = self.telemetry['position']
                 self.position_display.config(
@@ -825,19 +1014,6 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
                 
                 if self.simulation_mode and not self.emergency_stop:
                     # Update simulation
-                    self.robot_sim.set_velocity(
-                        self.target_velocity['linear'],
-                        self.target_velocity['angular']
-                    )
-                    
-                    # Update manipulator from GUI
-                    self.robot_sim.set_manipulator_joints(
-                        self.manipulator_vars['joint1'].get(),
-                        self.manipulator_vars['joint2'].get(),
-                        self.manipulator_vars['joint3'].get(),
-                        self.manipulator_vars['gripper'].get()
-                    )
-                    
                     self.robot_sim.update(dt)
                     
                     # Update telemetry from simulation
@@ -1007,6 +1183,31 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
             
         self.add_log(f"Mode changed to: {mode}")
         
+    def test_motors(self):
+        """Test motor functionality"""
+        self.add_log("Testing motors...")
+        
+        # Test sequence
+        test_sequence = [
+            (0.5, 0.0),   # Forward
+            (0.0, 0.5),   # Right
+            (-0.5, 0.0),  # Backward
+            (0.0, -0.5),  # Left
+            (0.0, 0.0)    # Stop
+        ]
+        
+        def run_test():
+            for i, (linear, angular) in enumerate(test_sequence):
+                self.target_velocity['linear'] = linear
+                self.target_velocity['angular'] = angular
+                self.add_log(f"Test {i+1}: Linear={linear:.1f}, Angular={angular:.1f}")
+                time.sleep(2)
+                
+            self.add_log("Motor test completed")
+            
+        test_thread = threading.Thread(target=run_test, daemon=True)
+        test_thread.start()
+        
     # Control functions
     def connect_robot(self):
         """Connect to robot"""
@@ -1044,6 +1245,8 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
         if self.emergency_stop:
             self.target_velocity['linear'] = 0.0
             self.target_velocity['angular'] = 0.0
+            if self.gpio_interface:
+                self.gpio_interface.emergency_stop()
             self.add_log("EMERGENCY STOP ACTIVATED")
         else:
             self.add_log("Emergency stop deactivated")
@@ -1067,34 +1270,6 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
         self.add_log("System reset completed")
         self.update_emergency_status()
         
-    def gripper_action(self, action):
-        """Gripper control action"""
-        if action == "open":
-            self.manipulator_vars['gripper'].set(100)
-            self.add_log("Gripper opened")
-        elif action == "close":
-            self.manipulator_vars['gripper'].set(0)
-            self.add_log("Gripper closed")
-        elif action == "home":
-            for var in self.manipulator_vars.values():
-                var.set(0.0)
-            self.add_log("Manipulator homed")
-            
-        # Send command to real robot if connected
-        if self.ros_manager and self.ros_manager.get_interface() and self.connected:
-            self.ros_manager.get_interface().send_manipulator_command(
-                self.manipulator_vars['joint1'].get(),
-                self.manipulator_vars['joint2'].get(),
-                self.manipulator_vars['joint3'].get(),
-                self.manipulator_vars['gripper'].get()
-            )
-            
-    def calibrate_controls(self):
-        """Calibrate control inputs"""
-        self.add_log("Control calibration started...")
-        messagebox.showinfo("Control Calibration", "Control calibration completed successfully")
-        self.add_log("Control calibration completed")
-        
     def add_log(self, message):
         """Add message to system log"""
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -1108,89 +1283,10 @@ Q/E: Joint1 | R/F: Joint2 | T/G: Joint3 | Z/X: Gripper | C: Home | ESC: E-Stop""
         if len(lines) > 50:
             self.system_log.delete(1.0, f"{len(lines)-49}.0")
             
-    def load_config(self):
-        """Load configuration"""
-        filename = filedialog.askopenfilename(
-            title="Load Robot Configuration",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
-        )
-        
-        if filename:
-            try:
-                with open(filename, 'r') as f:
-                    config = json.load(f)
-                    
-                self.add_log(f"Configuration loaded from {filename}")
-                messagebox.showinfo("Load Config", "Configuration loaded successfully")
-            except Exception as e:
-                messagebox.showerror("Load Error", f"Failed to load configuration: {e}")
-                
-    def save_config(self):
-        """Save configuration"""
-        filename = filedialog.asksaveasfilename(
-            title="Save Robot Configuration",
-            defaultfile="sanhum_config.json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
-        )
-        
-        if filename:
-            try:
-                config = {
-                    'robot_namespace': self.robot_namespace.get(),
-                    'simulation_mode': self.simulation_mode,
-                    'velocity_limits': {
-                        'linear': {'min': -2.0, 'max': 2.0},
-                        'angular': {'min': -3.14, 'max': 3.14}
-                    },
-                    'manipulator_joints': {name: var.get() for name, var in self.manipulator_vars.items()}
-                }
-                
-                with open(filename, 'w') as f:
-                    json.dump(config, f, indent=2)
-                    
-                self.add_log(f"Configuration saved to {filename}")
-                messagebox.showinfo("Save Config", "Configuration saved successfully")
-            except Exception as e:
-                messagebox.showerror("Save Error", f"Failed to save configuration: {e}")
-                
-    def robot_parameters(self):
-        """Show robot parameters dialog"""
-        params = """
-SANHUM ROBOT PARAMETERS:
-========================
-Model: Sanhum Robot v4.0
-Type: Differential Drive with Manipulator
-
-PHYSICAL:
-- Chassis: 0.8m x 0.6m x 0.3m
-- Track Width: 0.15m
-- Wheel Radius: 0.1m
-- Max Speed: 2.0 m/s linear, 3.14 rad/s angular
-
-MANIPULATOR:
-- 3 DOF + Gripper
-- Link1: 0.3m (Base)
-- Link2: 0.25m (Shoulder)  
-- Link3: 0.2m (Elbow)
-- Gripper: 0.15m
-
-SENSORS:
-- Ultrasonic: Front/Rear (0.1-3.0m)
-- Infrared: Left/Right (0.05-1.0m)
-- IMU: 9-DOF (Roll/Pitch/Yaw)
-- Battery: 12V 20Ah
-
-COMMUNICATION:
-- ROS2 Jazzy
-- Serial: ESP32 (Manipulator), Arduino (Sensors)
-- Control Frequency: 20 Hz
-        """
-        messagebox.showinfo("Robot Parameters", params)
-        
     def show_control_guide(self):
         """Show control guide"""
         guide = """
-SANHUM ROBOT CONTROL GUIDE v4.0
+SANHUM ROBOT CONTROL GUIDE v5.0
 ================================
 
 KEYBOARD CONTROLS:
@@ -1204,17 +1300,17 @@ KEYBOARD CONTROLS:
 - C: Home all manipulator joints
 - ESC: Emergency stop
 
-GAMEPAD CONTROLS:
-- Left Stick: Robot movement
-- Right Stick: Manipulator control
-- A Button: Close gripper
-- B Button: Open gripper
-- Start Button: Emergency stop
+BUTTON CONTROLS:
+- CONNECT: Connect to robot
+- DISCONNECT: Disconnect from robot
+- E-STOP: Emergency stop
+- OPEN/CLOSE/HOME: Gripper controls
 
-MANIPULATOR:
-- Single-line control layout
-- Real-time joint angle display
-- Quick action buttons for gripper
+REAL-TIME FEEDBACK:
+- Active keys display shows current input
+- Velocity display shows actual robot speed
+- 3D visualization updates in real-time
+- Telemetry data updates continuously
 
 SAFETY FEATURES:
 - Emergency stop always available
@@ -1226,7 +1322,7 @@ SAFETY FEATURES:
     def show_info(self):
         """Show system information"""
         info = f"""
-SANHUM ROBOT CONTROL SYSTEM v4.0
+SANHUM ROBOT CONTROL SYSTEM v5.0
 ================================
 
 SYSTEM:
@@ -1234,6 +1330,7 @@ Python: {sys.version.split()[0]}
 Platform: {sys.platform}
 GUI Framework: Tkinter
 ROS2 Interface: {'Available' if ROS2_AVAILABLE else 'Not Available'}
+GPIO Interface: {'Available' if self.gpio_interface else 'Not Available'}
 
 STATUS:
 Connection: {'Connected' if self.connected else 'Disconnected'}
@@ -1246,7 +1343,7 @@ Velocity: Linear={self.telemetry['velocity']['linear']:.2f}m/s, Angular={self.te
 Battery: {self.telemetry['battery']:.1f}%
 
 © 2024 Sanhum Robot Project
-Professional Version - Keyboard/Gamepad Control
+Working Version - Functional Controls
         """
         messagebox.showinfo("System Information", info)
         
@@ -1254,6 +1351,7 @@ Professional Version - Keyboard/Gamepad Control
         """Quit application"""
         if messagebox.askokcancel("Exit", "Are you sure you want to exit the robot control system?"):
             self.telemetry_thread_running = False
+            self.input_thread_running = False
             self.simulation_thread_running = False
             
             if self.input_controller:
@@ -1262,6 +1360,9 @@ Professional Version - Keyboard/Gamepad Control
             if self.ros_manager:
                 self.ros_manager.stop_ros()
                 
+            if self.gpio_interface:
+                self.gpio_interface.cleanup()
+                
             if self.connected:
                 self.disconnect_robot()
                 
@@ -1269,10 +1370,11 @@ Professional Version - Keyboard/Gamepad Control
             
     def run(self):
         """Start the GUI"""
-        self.add_log("Sanhum Robot Control System v4.0 initialized")
+        self.add_log("Sanhum Robot Control System v5.0 initialized")
         self.add_log(f"ROS2 Interface: {'Available' if ROS2_AVAILABLE else 'Not Available'}")
-        self.add_log("Keyboard/Gamepad controls ready")
-        self.add_log("System ready - Use keyboard or gamepad to control robot")
+        self.add_log(f"GPIO Interface: {'Available' if self.gpio_interface else 'Not Available'}")
+        self.add_log("Keyboard controls ready - Use W/A/S/D to move robot")
+        self.add_log("System ready - Press keys to control robot")
         
         try:
             self.root.mainloop()
@@ -1280,5 +1382,5 @@ Professional Version - Keyboard/Gamepad Control
             self.quit_app()
 
 if __name__ == "__main__":
-    app = ProfessionalRobotGUI()
+    app = WorkingRobotGUI()
     app.run()
