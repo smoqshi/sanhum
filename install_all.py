@@ -102,8 +102,10 @@ class UniversalInstaller:
                     if success and 'cl.exe' in _:
                         self.color_print(f"  ✓ {tool} ({description})", 'green')
                     else:
-                        self.color_print(f"  ✗ {tool} ({description}) - Visual Studio required", 'red')
-                        all_checks_passed = False
+                        self.color_print(f"  ⚠ {tool} ({description}) - Visual Studio not found", 'yellow')
+                        self.color_print("    Note: Will install with MinGW-w64 as alternative", 'blue')
+                        self.color_print("    Or install Visual Studio 2019+ with C++ tools", 'blue')
+                        # Don't fail for missing cl - we can use alternative compiler
                 elif tool == 'vcpkg':
                     vcpkg_path = Path("C:/vcpkg/vcpkg.exe")
                     if vcpkg_path.exists():
@@ -402,7 +404,7 @@ class UniversalInstaller:
         return True
         
     def build_project(self):
-        """Build the project"""
+        """Build project"""
         self.color_print("Building Sanhum project...", 'blue')
         
         if self.platform == 'windows':
@@ -410,8 +412,45 @@ class UniversalInstaller:
             build_dir = self.project_root / "build"
             build_dir.mkdir(exist_ok=True)
             
+            # Check for Visual Studio compiler first
+            has_cl, _, _ = self.run_command('where cl', capture_output=True)
+            has_cl = has_cl and 'cl.exe' in _
+            
+            if has_cl:
+                # Use Visual Studio toolchain
+                cmake_cmd = f'cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
+                self.color_print("Using Visual Studio compiler...", 'blue')
+            else:
+                # Use MinGW-w64 as alternative
+                mingw_path = Path("C:/mingw64")
+                if not mingw_path.exists():
+                    self.color_print("Installing MinGW-w64 compiler...", 'blue')
+                    # Download and install MinGW-w64
+                    mingw_url = "https://github.com/niXman/mingw-builds-binaries/releases/download/13.2.0-rt_v11-rev1/x86_64-13.2.0-release-posix-seh-ucrt-rt_v11-rev1.7z"
+                    mingw_archive = "mingw64.7z"
+                    
+                    if not self.download_file(mingw_url, mingw_archive):
+                        return False
+                    
+                    # Extract MinGW-w64
+                    try:
+                        import py7zr
+                        self.color_print("Extracting MinGW-w64...", 'blue')
+                        with py7zr.SevenZipFile(mingw_archive, mode='r') as z:
+                            z.extractall("C:/")
+                        
+                        # Clean up
+                        Path(mingw_archive).unlink()
+                        self.color_print("MinGW-w64 installed successfully", 'green')
+                    except ImportError:
+                        self.color_print("py7zr not available, skipping MinGW installation", 'yellow')
+                        self.color_print("Please install MinGW-w64 manually from https://www.mingw-w64.org/", 'yellow')
+                
+                # Use MinGW toolchain
+                cmake_cmd = f'cmake .. -G "MinGW Makefiles" -DCMAKE_C_COMPILER=C:/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/mingw64/bin/g++.exe -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
+                self.color_print("Using MinGW-w64 compiler...", 'blue')
+            
             # Configure CMake
-            cmake_cmd = f'cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
             success, stdout, stderr = self.run_command(cmake_cmd, cwd=build_dir)
             if not success:
                 self.color_print("CMake configuration failed", 'red')
@@ -419,7 +458,12 @@ class UniversalInstaller:
                 return False
                 
             # Build
-            success, stdout, stderr = self.run_command("cmake --build . --config Release", cwd=build_dir)
+            if has_cl:
+                build_cmd = "cmake --build . --config Release"
+            else:
+                build_cmd = "cmake --build . --config Release -- -j4"
+                
+            success, stdout, stderr = self.run_command(build_cmd, cwd=build_dir)
             if not success:
                 self.color_print("Build failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
