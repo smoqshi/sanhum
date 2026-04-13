@@ -311,6 +311,22 @@ class UniversalInstaller:
                 self.color_print("Failed to bootstrap vcpkg", 'red')
                 return False
                 
+        # Clean up any existing vcpkg locks
+        self.color_print("Cleaning up vcpkg locks...", 'blue')
+        lock_files = [
+            "C:/vcpkg/installed/vcpkg/vcpkg-running.lock",
+            "C:/vcpkg/buildtrees/vcpkg-running.lock"
+        ]
+        
+        for lock_file in lock_files:
+            lock_path = Path(lock_file)
+            if lock_path.exists():
+                try:
+                    lock_path.unlink()
+                    self.color_print(f"Removed lock: {lock_file}", 'yellow')
+                except Exception as e:
+                    self.color_print(f"Could not remove lock {lock_file}: {e}", 'yellow')
+        
         # Install packages with vcpkg
         packages = [
             "opencv4[core,contrib]:x64-windows",
@@ -321,9 +337,14 @@ class UniversalInstaller:
             self.color_print(f"Installing {package}...", 'blue')
             success, stdout, stderr = self.run_command(f"C:/vcpkg/vcpkg.exe install {package}")
             if not success:
-                self.color_print(f"Failed to install {package}", 'red')
-                self.color_print(f"Error: {stderr}", 'red')
-                return False
+                if "vcpkg-running.lock" in stderr:
+                    self.color_print(f"vcpkg is busy. Please wait and try again.", 'yellow')
+                    self.color_print("Or close any other vcpkg processes.", 'yellow')
+                    return False
+                else:
+                    self.color_print(f"Failed to install {package}", 'red')
+                    self.color_print(f"Error: {stderr}", 'red')
+                    return False
                 
         # Integrate with Visual Studio
         self.color_print("Integrating vcpkg with Visual Studio...", 'blue')
