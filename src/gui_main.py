@@ -719,45 +719,6 @@ class FullyIntegratedRobotGUI:
                     # Smooth transitions
                     self.target_velocity['linear'] = self.target_velocity['linear'] * 0.8 + linear * 0.2
                     self.target_velocity['angular'] = self.target_velocity['angular'] * 0.8 + angular * 0.2
-                    
-                    # Process manipulator keys
-                    if self.key_pressed['q']:
-                        self.manipulator_vars['joint1'].set(
-                            max(-180, self.manipulator_vars['joint1'].get() - 2))
-                    elif self.key_pressed['e']:
-                        self.manipulator_vars['joint1'].set(
-                            min(180, self.manipulator_vars['joint1'].get() + 2))
-                            
-                    if self.key_pressed['r']:
-                        self.manipulator_vars['joint2'].set(
-                            max(-90, self.manipulator_vars['joint2'].get() - 2))
-                    elif self.key_pressed['f']:
-                        self.manipulator_vars['joint2'].set(
-                            min(90, self.manipulator_vars['joint2'].get() + 2))
-                            
-                    if self.key_pressed['t']:
-                        self.manipulator_vars['joint3'].set(
-                            max(-180, self.manipulator_vars['joint3'].get() - 2))
-                    elif self.key_pressed['g']:
-                        self.manipulator_vars['joint3'].set(
-                            min(180, self.manipulator_vars['joint3'].get() + 2))
-                            
-                    if self.key_pressed['y']:
-                        self.manipulator_vars['joint4'].set(
-                            max(-180, self.manipulator_vars['joint4'].get() - 2))
-                    elif self.key_pressed['h']:
-                        self.manipulator_vars['joint4'].set(
-                            min(180, self.manipulator_vars['joint4'].get() + 2))
-                            
-                    if self.key_pressed['u']:
-                        self.manipulator_vars['joint5'].set(
-                            max(-180, self.manipulator_vars['joint5'].get() - 2))
-                    elif self.key_pressed['i']:
-                        self.manipulator_vars['joint5'].set(
-                            min(180, self.manipulator_vars['joint5'].get() + 2))
-                
-                # Send commands to hardware
-                self.send_robot_commands()
                 
                 time.sleep(0.05)  # 20 Hz
                 
@@ -778,11 +739,8 @@ class FullyIntegratedRobotGUI:
                 self.gpio_interface.set_motor_speed('left', left_speed / 2.0)
                 self.gpio_interface.set_motor_speed('right', right_speed / 2.0)
             else:
-                # Simulation control
-                self.robot_sim.set_velocity(
-                    self.target_velocity['linear'],
-                    self.target_velocity['angular']
-                )
+                # Simulation control - velocity set in simulation loop
+                pass
                 
             # Send manipulator commands to ESP32 (5 joints)
             if self.esp32_interface:
@@ -1367,7 +1325,11 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
                 last_time = current_time
                 
                 if self.simulation_mode and not self.emergency_stop:
-                    # Update simulation
+                    # Update simulation with target velocities
+                    self.robot_sim.set_velocity(
+                        self.target_velocity['linear'],
+                        self.target_velocity['angular']
+                    )
                     self.robot_sim.update(dt)
                     
                     # Update telemetry from simulation
