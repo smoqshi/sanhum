@@ -28,6 +28,181 @@ class UniversalInstaller:
             'nc': '\033[0m'  # No Color
         }
         
+    def check_modules(self):
+        """Check if required modules and dependencies are available"""
+        self.color_print("Checking system modules and dependencies...", 'blue')
+        print()
+        
+        all_checks_passed = True
+        
+        # Check Python version
+        python_version = sys.version_info
+        if python_version >= (3, 8):
+            self.color_print(f"✓ Python {python_version.major}.{python_version.minor}.{python_version.micro}", 'green')
+        else:
+            self.color_print(f"✗ Python {python_version.major}.{python_version.minor}.{python_version.micro} (requires 3.8+)", 'red')
+            all_checks_passed = False
+        
+        # Check required Python modules
+        required_modules = {
+            'subprocess': 'Standard library',
+            'pathlib': 'Standard library',
+            'urllib.request': 'Standard library',
+            'zipfile': 'Standard library',
+            'shutil': 'Standard library',
+            'platform': 'Standard library',
+            'ctypes': 'Standard library (Windows admin check)',
+            'os': 'Standard library',
+            'sys': 'Standard library'
+        }
+        
+        self.color_print("Python Modules:", 'blue')
+        for module, description in required_modules.items():
+            try:
+                __import__(module)
+                self.color_print(f"  ✓ {module} ({description})", 'green')
+            except ImportError:
+                self.color_print(f"  ✗ {module} ({description}) - MISSING", 'red')
+                all_checks_passed = False
+        
+        # Check optional modules
+        optional_modules = {
+            'serial': 'Hardware communication',
+            'cv2': 'OpenCV computer vision',
+            'numpy': 'Numerical computing',
+            'pygame': 'Gamepad support',
+            'rclpy': 'ROS2 Python client',
+            'PIL': 'Image processing (Pillow)',
+            'tkinter': 'GUI framework'
+        }
+        
+        self.color_print("\nOptional Modules:", 'blue')
+        for module, description in optional_modules.items():
+            try:
+                __import__(module)
+                self.color_print(f"  ✓ {module} ({description})", 'green')
+            except ImportError:
+                self.color_print(f"  ⚠ {module} ({description}) - Not installed (optional)", 'yellow')
+        
+        # Check system tools
+        self.color_print("\nSystem Tools:", 'blue')
+        
+        if self.platform == 'windows':
+            system_tools = {
+                'git': 'Version control',
+                'cmake': 'Build system',
+                'cl': 'Visual Studio compiler',
+                'vcpkg': 'Package manager'
+            }
+            
+            for tool, description in system_tools.items():
+                if tool == 'cl':
+                    # Check for Visual Studio compiler
+                    success, _, _ = self.run_command('where cl', capture_output=True)
+                    if success and 'cl.exe' in _:
+                        self.color_print(f"  ✓ {tool} ({description})", 'green')
+                    else:
+                        self.color_print(f"  ✗ {tool} ({description}) - Visual Studio required", 'red')
+                        all_checks_passed = False
+                elif tool == 'vcpkg':
+                    vcpkg_path = Path("C:/vcpkg/vcpkg.exe")
+                    if vcpkg_path.exists():
+                        self.color_print(f"  ✓ {tool} ({description})", 'green')
+                    else:
+                        self.color_print(f"  ⚠ {tool} ({description}) - Will be installed", 'yellow')
+                else:
+                    success, _, _ = self.run_command(f'where {tool}', capture_output=True)
+                    if success:
+                        self.color_print(f"  ✓ {tool} ({description})", 'green')
+                    else:
+                        self.color_print(f"  ✗ {tool} ({description}) - Not found", 'red')
+                        all_checks_passed = False
+        
+        elif self.platform == 'linux':
+            system_tools = {
+                'git': 'Version control',
+                'cmake': 'Build system',
+                'gcc': 'C compiler',
+                'apt': 'Package manager',
+                'colcon': 'ROS2 build tool'
+            }
+            
+            for tool, description in system_tools.items():
+                success, _, _ = self.run_command(f'which {tool}', capture_output=True)
+                if success:
+                    self.color_print(f"  ✓ {tool} ({description})", 'green')
+                else:
+                    if tool in ['colcon']:
+                        self.color_print(f"  ⚠ {tool} ({description}) - Will be installed", 'yellow')
+                    else:
+                        self.color_print(f"  ✗ {tool} ({description}) - Not found", 'red')
+                        all_checks_passed = False
+        
+        # Check hardware access
+        self.color_print("\nHardware Access:", 'blue')
+        
+        if self.platform == 'windows':
+            # Check COM ports for potential hardware
+            try:
+                import serial.tools.list_ports
+                ports = serial.tools.list_ports.comports()
+                if ports:
+                    self.color_print(f"  ✓ {len(ports)} serial port(s) available", 'green')
+                    for port in ports[:3]:  # Show first 3 ports
+                        self.color_print(f"    - {port.device} ({port.description})", 'blue')
+                else:
+                    self.color_print("  ⚠ No serial ports detected (robot hardware not connected)", 'yellow')
+            except ImportError:
+                self.color_print("  ⚠ Cannot check serial ports (pyserial not installed)", 'yellow')
+        
+        elif self.platform == 'linux':
+            # Check for common device paths
+            device_paths = ['/dev/ttyUSB*', '/dev/ttyACM*']
+            devices_found = False
+            for pattern in device_paths:
+                success, stdout, _ = self.run_command(f'ls {pattern} 2>/dev/null', capture_output=True)
+                if success and stdout.strip():
+                    self.color_print(f"  ✓ Serial devices found: {stdout.strip()}", 'green')
+                    devices_found = True
+                    break
+            
+            if not devices_found:
+                self.color_print("  ⚠ No serial devices detected (robot hardware not connected)", 'yellow')
+        
+        # Check disk space
+        self.color_print("\nDisk Space:", 'blue')
+        try:
+            import shutil
+            total, used, free = shutil.disk_usage(self.project_root)
+            free_gb = free // (1024**3)
+            
+            if free_gb >= 5:
+                self.color_print(f"  ✓ {free_gb} GB free space", 'green')
+            elif free_gb >= 2:
+                self.color_print(f"  ⚠ {free_gb} GB free space (recommended: 5GB+)", 'yellow')
+            else:
+                self.color_print(f"  ✗ {free_gb} GB free space (insufficient)", 'red')
+                all_checks_passed = False
+        except Exception:
+            self.color_print("  ⚠ Cannot check disk space", 'yellow')
+        
+        # Summary
+        print()
+        if all_checks_passed:
+            self.color_print("✓ All required modules and tools are available!", 'green')
+            self.color_print("  Ready to proceed with installation.", 'green')
+        else:
+            self.color_print("✗ Some required modules or tools are missing!", 'red')
+            self.color_print("  Please install missing dependencies before proceeding.", 'red')
+            self.color_print("  Continue anyway? (NOT RECOMMENDED)", 'yellow')
+            
+            response = input("Continue with installation? [y/N]: ").strip().lower()
+            if response not in ['y', 'yes']:
+                self.color_print("Installation cancelled by user.", 'yellow')
+                return False
+        
+        return all_checks_passed
+    
     def print_header(self):
         print("=" * 60)
         print("Sanhum Robot Universal Installer")
@@ -320,6 +495,10 @@ ros2 launch sanhum raspberry_pi.launch.py
     def install_all(self):
         """Main installation function"""
         self.print_header()
+        
+        # Check modules and dependencies first
+        if not self.check_modules():
+            return False
         
         try:
             # Platform-specific installation
