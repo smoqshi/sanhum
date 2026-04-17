@@ -14,51 +14,76 @@ import json
 class CameraInterface:
     """Interface for camera capture and processing"""
     
-    def __init__(self, camera_indices: List[int] = [0, 1, 2]):
-        self.camera_indices = camera_indices
+    def __init__(self, camera_config: Dict = None):
+        # Default camera configuration
+        default_config = {
+            'cameras': {
+                'left': {'index': 0, 'name': 'Stereo Left', 'resolution': (640, 480), 'fps': 30},
+                'right': {'index': 1, 'name': 'Stereo Right', 'resolution': (640, 480), 'fps': 30},
+                'mono': {'index': 2, 'name': 'Monocular', 'resolution': (640, 480), 'fps': 30}
+            },
+            'stereo_baseline': 0.12,  # 12cm baseline for stereo cameras
+            'auto_exposure': True,
+            'auto_white_balance': True
+        }
+        
+        self.config = camera_config or default_config
         self.captures = {}
         self.connected = {}
         self.running = False
         self.frame_callbacks = {}
         self.capture_threads = {}
         
-        # Frame counters
-        self.frame_counts = {i: 0 for i in camera_indices}
+        # Frame counters and latest frames
+        self.frame_counts = {}
+        self.latest_frames = {}
+        
+        # Camera names mapping
+        self.camera_names = list(self.config['cameras'].keys())
+        
+        for name in self.camera_names:
+            self.frame_counts[name] = 0
+            self.latest_frames[name] = None
         
     def connect(self) -> bool:
         """Connect to all cameras"""
         success = True
         
-        for idx in self.camera_indices:
+        for camera_name, camera_config in self.config['cameras'].items():
             try:
-                cap = cv2.VideoCapture(idx)
+                cap = cv2.VideoCapture(camera_config['index'])
                 
                 # Test if camera is available
                 if cap.isOpened():
                     # Set camera properties
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    cap.set(cv2.CAP_PROP_FPS, 30)
+                    width, height = camera_config['resolution']
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                    cap.set(cv2.CAP_PROP_FPS, camera_config['fps'])
+                    
+                    # Configure camera settings
+                    if self.config.get('auto_exposure', True):
+                        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
+                    
+                    if self.config.get('auto_white_balance', True):
+                        cap.set(cv2.CAP_PROP_AUTO_WB, 1)
                     
                     # Test capture
                     ret, frame = cap.read()
                     if ret and frame is not None:
-                        self.captures[idx] = cap
-                        self.connected[idx] = True
-                        print(f"Camera {idx} connected successfully")
+                        self.captures[camera_name] = cap
+                        self.connected[camera_name] = True
+                        print(f"{camera_config['name']} (index {camera_config['index']}) connected successfully")
                     else:
-                        print(f"Camera {idx} failed to capture frame")
+                        print(f"{camera_config['name']} failed to capture frame")
                         cap.release()
-                        self.connected[idx] = False
                         success = False
                 else:
-                    print(f"Camera {idx} not available")
-                    self.connected[idx] = False
+                    print(f"{camera_config['name']} (index {camera_config['index']}) not available")
                     success = False
                     
             except Exception as e:
-                print(f"Error connecting to camera {idx}: {e}")
-                self.connected[idx] = False
+                print(f"Error connecting to {camera_name}: {e}")
                 success = False
                 
         return success and len(self.captures) > 0

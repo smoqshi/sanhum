@@ -18,7 +18,7 @@ from collections import defaultdict
 
 # Import our robot modules
 try:
-    from robot_interface import RobotInterfaceManager, RobotMode
+    from hardware_integration import HardwareManager, RobotMode
     from robot_simulation import RobotSimulation, Vector3
     from input_controller import InputController, ControlMode
     from rpi_gpio_interface import RPiGPIOInterface
@@ -29,7 +29,10 @@ try:
     GPIO_AVAILABLE = True
     ALL_MODULES_AVAILABLE = True
 except ImportError as e:
-    print(f"Warning: Some modules not available: {e}")
+    print(f"Import error: {e}")
+    from hardware_integration import HardwareManager as HardwareManagerFallback, RobotMode as RobotModeFallback
+    HardwareManager = HardwareManagerFallback
+    RobotMode = RobotModeFallback
     ROS2_AVAILABLE = False
     GPIO_AVAILABLE = False
     ALL_MODULES_AVAILABLE = False
@@ -210,7 +213,7 @@ except ImportError as e:
                 )
                 transformed.append(world_pos)
                 
-            return vertices
+            return transformed
             
         def get_track_vertices(self, side):
             """Get track vertices for visualization"""
@@ -296,6 +299,7 @@ except ImportError as e:
             end_x = j5_x + self.link5_length * math.cos(total_angle_4_5)
             end_y = j5_y
             end_z = j5_z + self.link5_length * math.sin(total_angle_4_5)
+            
             
             # Create bone connections
             links = [
@@ -434,6 +438,14 @@ class FullyIntegratedRobotGUI:
         self.emergency_stop = False
         self.simulation_mode = True
         self.robot_namespace = StringVar(value="sanhum_robot")
+        
+        # Initialize hardware manager
+        try:
+            self.hardware_manager = HardwareManager(mode=RobotMode.HYBRID)
+            print(f"Hardware manager initialized: {self.hardware_manager.connected}")
+        except Exception as e:
+            print(f"Failed to initialize hardware manager: {e}")
+            self.hardware_manager = None
         
         # Control state
         self.target_velocity = {'linear': 0.0, 'angular': 0.0}
@@ -719,6 +731,55 @@ class FullyIntegratedRobotGUI:
                     # Smooth transitions
                     self.target_velocity['linear'] = self.target_velocity['linear'] * 0.8 + linear * 0.2
                     self.target_velocity['angular'] = self.target_velocity['angular'] * 0.8 + angular * 0.2
+                    
+                    # Process manipulator keys
+                    if self.key_pressed['q']:
+                        joint1_val = self.manipulator_vars['joint1'].get()
+                        new_val = max(-180, min(180, joint1_val - 2))
+                        self.manipulator_vars['joint1'].set(new_val)
+                    if self.key_pressed['e']:
+                        joint1_val = self.manipulator_vars['joint1'].get()
+                        new_val = max(-180, min(180, joint1_val + 2))
+                        self.manipulator_vars['joint1'].set(new_val)
+                        
+                    if self.key_pressed['r']:
+                        joint2_val = self.manipulator_vars['joint2'].get()
+                        new_val = max(-90, min(90, joint2_val - 2))
+                        self.manipulator_vars['joint2'].set(new_val)
+                    if self.key_pressed['f']:
+                        joint2_val = self.manipulator_vars['joint2'].get()
+                        new_val = max(-90, min(90, joint2_val + 2))
+                        self.manipulator_vars['joint2'].set(new_val)
+                        
+                    if self.key_pressed['t']:
+                        joint3_val = self.manipulator_vars['joint3'].get()
+                        new_val = max(-90, min(90, joint3_val - 2))
+                        self.manipulator_vars['joint3'].set(new_val)
+                    if self.key_pressed['g']:
+                        joint3_val = self.manipulator_vars['joint3'].get()
+                        new_val = max(-90, min(90, joint3_val + 2))
+                        self.manipulator_vars['joint3'].set(new_val)
+                        
+                    if self.key_pressed['y']:
+                        joint4_val = self.manipulator_vars['joint4'].get()
+                        new_val = max(-90, min(90, joint4_val - 2))
+                        self.manipulator_vars['joint4'].set(new_val)
+                    if self.key_pressed['h']:
+                        joint4_val = self.manipulator_vars['joint4'].get()
+                        new_val = max(-90, min(90, joint4_val + 2))
+                        self.manipulator_vars['joint4'].set(new_val)
+                        
+                    if self.key_pressed['u']:
+                        joint5_val = self.manipulator_vars['joint5'].get()
+                        new_val = max(-90, min(90, joint5_val - 2))
+                        self.manipulator_vars['joint5'].set(new_val)
+                    if self.key_pressed['i']:
+                        joint5_val = self.manipulator_vars['joint5'].get()
+                        new_val = max(-90, min(90, joint5_val + 2))
+                        self.manipulator_vars['joint5'].set(new_val)
+                
+                # Send commands to update simulation
+                self.send_robot_commands()
                 
                 time.sleep(0.05)  # 20 Hz
                 
@@ -730,20 +791,21 @@ class FullyIntegratedRobotGUI:
         """Send commands to robot hardware/simulation"""
         try:
             # Send velocity commands
-            if self.gpio_interface and not self.simulation_mode:
+            if self.hardware_manager and not self.simulation_mode:
                 # Real hardware control using actual track gauge
                 track_gauge = self.robot_sim.track_gauge
                 left_speed = self.target_velocity['linear'] - self.target_velocity['angular'] * track_gauge / 2.0
                 right_speed = self.target_velocity['linear'] + self.target_velocity['angular'] * track_gauge / 2.0
                 
-                self.gpio_interface.set_motor_speed('left', left_speed / 2.0)
-                self.gpio_interface.set_motor_speed('right', right_speed / 2.0)
+                self.hardware_manager.set_motor_speed('left', left_speed / 2.0)
+                self.hardware_manager.set_motor_speed('right', right_speed / 2.0)
             else:
                 # Simulation control - velocity set in simulation loop
                 pass
                 
-            # Send manipulator commands to ESP32 (5 joints)
-            if self.esp32_interface:
+            # Send manipulator commands
+            if self.hardware_manager and not self.simulation_mode:
+                # Real manipulator control
                 joint_positions = [
                     self.manipulator_vars['joint1'].get(),
                     self.manipulator_vars['joint2'].get(),
@@ -751,21 +813,20 @@ class FullyIntegratedRobotGUI:
                     self.manipulator_vars['joint4'].get(),
                     self.manipulator_vars['joint5'].get()
                 ]
-                self.esp32_interface.send_joint_command(joint_positions)
+                self.hardware_manager.send_joint_command(joint_positions)
                 
                 # Send gripper command
                 gripper_open = self.manipulator_vars['gripper'].get()
-                self.esp32_interface.send_gripper_command(gripper_open)
+                self.hardware_manager.send_gripper_command(gripper_open)
             else:
                 # Simulation manipulator control
-                self.robot_sim.set_manipulator_joints(
-                    self.manipulator_vars['joint1'].get(),
-                    self.manipulator_vars['joint2'].get(),
-                    self.manipulator_vars['joint3'].get(),
-                    self.manipulator_vars['joint4'].get(),
-                    self.manipulator_vars['joint5'].get(),
-                    self.manipulator_vars['gripper'].get()
-                )
+                joint1 = self.manipulator_vars['joint1'].get()
+                joint2 = self.manipulator_vars['joint2'].get()
+                joint3 = self.manipulator_vars['joint3'].get()
+                joint4 = self.manipulator_vars['joint4'].get()
+                joint5 = self.manipulator_vars['joint5'].get()
+                gripper = self.manipulator_vars['gripper'].get()
+                self.robot_sim.set_manipulator_joints(joint1, joint2, joint3, joint4, joint5, gripper)
                 
             # Send ROS2 commands if available
             if self.ros_manager and self.ros_manager.get_interface() and self.connected:
@@ -1409,6 +1470,7 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
         cx, cy = 200, 125  # Canvas center
         scale = 50  # Scale factor
         
+                
         # Draw robot chassis
         chassis_verts = self.robot_sim.get_chassis_vertices()
         if chassis_verts:
