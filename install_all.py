@@ -508,7 +508,7 @@ class UniversalInstaller:
                 project_link.symlink_to(self.project_root)
                 
             # Build with colcon
-            success, stdout, stderr = self.run_command("colcon build --packages-select sanhum", cwd=workspace_dir)
+            success, stdout, stderr = self.run_command("colcon build", cwd=workspace_dir)
             if not success:
                 self.color_print("Build failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
