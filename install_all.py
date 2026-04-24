@@ -384,7 +384,12 @@ class UniversalInstaller:
         for cmd in commands:
             self.color_print(f"Running: {cmd}", 'blue')
             success, stdout, stderr = self.run_command(cmd)
-            if not success:
+            
+            # Handle rosdep init already initialized case
+            if "sudo rosdep init" in cmd and not success and ("already exists" in stderr or "already exists:" in stderr):
+                self.color_print("rosdep already initialized (this is normal)", 'green')
+                success = True
+            elif not success:
                 self.color_print(f"Failed: {cmd}", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
                 return False
