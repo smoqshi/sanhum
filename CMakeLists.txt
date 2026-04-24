@@ -119,7 +119,7 @@ else()
         ${OpenCV_INCLUDE_DIRS}
     )
 
-    target_link_libraries(sanhum_robot_gui_cpp PRIVATE
+    target_link_libraries(sanhum_robot_gui_cpp
         Qt5::Core
         Qt5::Gui
         Qt5::Widgets
