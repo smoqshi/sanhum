@@ -53,7 +53,7 @@ class UniversalInstaller:
             'platform': 'Standard library',
             'ctypes': 'Standard library (Windows admin check)',
             'os': 'Standard library',
-            'sys': 'Standard library'
+            'sys': 'Standard library'   
         }
         
         self.color_print("Python Modules:", 'blue')
