@@ -502,10 +502,10 @@ class UniversalInstaller:
             src_dir = workspace_dir / "src"
             src_dir.mkdir(exist_ok=True)
             
-            # Create symlink if not exists
-            project_link = src_dir / "sanhum"
-            if not project_link.exists():
-                project_link.symlink_to(self.project_root)
+            # Copy project files to workspace (avoid nested workspace issues)
+            import shutil
+            if not (src_dir / "sanhum").exists():
+                shutil.copytree(self.project_root, src_dir / "sanhum", ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.git'))
                 
             # Build with colcon
             success, stdout, stderr = self.run_command("colcon build", cwd=workspace_dir)
