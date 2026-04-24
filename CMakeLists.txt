@@ -86,6 +86,20 @@ else()
     # --- Linux/PI Robot Build ---
     message(STATUS "Configuring for Linux Robot - High Performance C++")
 
+    # Find Qt5
+    find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
+    set(CMAKE_AUTOMOC ON)
+    set(CMAKE_AUTORCC ON)
+    set(CMAKE_AUTOUIC ON)
+
+    # Find OpenCV
+    find_package(OpenCV REQUIRED)
+
+    # Find additional ROS2 packages
+    find_package(nav_msgs REQUIRED)
+    find_package(vision_msgs REQUIRED)
+    find_package(cv_bridge REQUIRED)
+
     # High Performance C++ GUI Application
     add_executable(sanhum_robot_gui_cpp
         src/sanhum_robot_gui.cpp
@@ -100,13 +114,28 @@ else()
 
     target_compile_definitions(sanhum_robot_gui_cpp PRIVATE PLATFORM_LINUX HIGH_PERFORMANCE)
 
-    target_include_directories(sanhum_robot_gui_cpp PRIVATE include)
+    target_include_directories(sanhum_robot_gui_cpp PRIVATE
+        include
+        ${OpenCV_INCLUDE_DIRS}
+    )
+
+    target_link_libraries(sanhum_robot_gui_cpp PRIVATE
+        Qt5::Core
+        Qt5::Gui
+        Qt5::Widgets
+        Qt5::Network
+        Qt5::SerialPort
+        ${OpenCV_LIBS}
+    )
 
     ament_target_dependencies(sanhum_robot_gui_cpp
         rclcpp
         geometry_msgs
-        std_msgs
+        nav_msgs
         sensor_msgs
+        std_msgs
+        vision_msgs
+        cv_bridge
     )
 
     install(TARGETS sanhum_robot_gui_cpp DESTINATION lib/${PROJECT_NAME})
@@ -123,6 +152,7 @@ else()
     ament_target_dependencies(sanhum_robot
         rclcpp
         geometry_msgs
+        nav_msgs
         std_msgs
         sensor_msgs
     )
