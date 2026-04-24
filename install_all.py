@@ -408,7 +408,6 @@ class UniversalInstaller:
             "python3-pip",
             "python3-vcstool",
             "python3-colcon-common-extensions",
-            "libqt5-dev",
             "qtbase5-dev",
             "libqt5serialport5-dev",
             "libopencv-dev",
