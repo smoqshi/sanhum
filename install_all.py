@@ -522,7 +522,8 @@ class UniversalInstaller:
                 
             # Build with colcon (optimized for speed)
             self.color_print("Building with parallel compilation (this may take a few minutes)...", 'blue')
-            success, stdout, stderr = self.run_command("colcon build --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=Release", cwd=workspace_dir)
+            self.color_print("Using symlink install for faster builds...", 'blue')
+            success, stdout, stderr = self.run_command("colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release", cwd=workspace_dir)
             if not success:
                 self.color_print("Build failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
