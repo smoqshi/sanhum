@@ -418,10 +418,10 @@ class UniversalInstaller:
                 return False
                 
         # Install Python packages
-        python_packages = ["pyserial"]
+        python_packages = ["python3-serial"]
         for package in python_packages:
             self.color_print(f"Installing Python package {package}...", 'blue')
-            success, _, _ = self.run_command(f"pip3 install {package}")
+            success, _, _ = self.run_command(f"sudo apt install -y {package}")
             if not success:
                 self.color_print(f"Failed to install {package}", 'red')
                 return False
