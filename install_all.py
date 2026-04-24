@@ -504,8 +504,21 @@ class UniversalInstaller:
             
             # Copy project files to workspace (avoid nested workspace issues)
             import shutil
+            def ignore_nested_workspace(path, names):
+                ignored = []
+                if 'ros2_ws' in names:
+                    ignored.append('ros2_ws')
+                if '__pycache__' in names:
+                    ignored.append('__pycache__')
+                if '.git' in names:
+                    ignored.append('.git')
+                for name in names:
+                    if name.endswith('.pyc'):
+                        ignored.append(name)
+                return ignored
+                
             if not (src_dir / "sanhum").exists():
-                shutil.copytree(self.project_root, src_dir / "sanhum", ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.git'))
+                shutil.copytree(self.project_root, src_dir / "sanhum", ignore=ignore_nested_workspace)
                 
             # Build with colcon
             success, stdout, stderr = self.run_command("colcon build", cwd=workspace_dir)
