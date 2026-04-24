@@ -142,13 +142,16 @@ else()
     # Robot node
     add_executable(sanhum_robot
         src/robot_main.cpp
+        src/motor_driver.cpp
+        src/esp32_driver.cpp
+        src/arduino_sensors.cpp
     )
 
     target_compile_definitions(sanhum_robot PRIVATE PLATFORM_LINUX PLATFORM_PI)
 
     target_include_directories(sanhum_robot PRIVATE include)
 
-    target_link_libraries(sanhum_robot Qt5::SerialPort)
+    target_link_libraries(sanhum_robot Qt5::SerialPort Qt5::Core)
 
     ament_target_dependencies(sanhum_robot
         rclcpp
