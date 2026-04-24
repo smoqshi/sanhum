@@ -100,14 +100,13 @@ else()
     find_package(vision_msgs REQUIRED)
     find_package(cv_bridge REQUIRED)
 
-    # High Performance C++ GUI Application
+    # High Performance C++ GUI Application (Linux - no gamepad_control)
     add_executable(sanhum_robot_gui_cpp
         src/sanhum_robot_gui.cpp
         src/motor_driver.cpp
         src/esp32_driver.cpp
         src/arduino_sensors.cpp
         src/cameras.cpp
-        src/gamepad_control.cpp
         src/wifi_server.cpp
         src/yolo_detector.cpp
     )
@@ -148,6 +147,8 @@ else()
     target_compile_definitions(sanhum_robot PRIVATE PLATFORM_LINUX PLATFORM_PI)
 
     target_include_directories(sanhum_robot PRIVATE include)
+
+    target_link_libraries(sanhum_robot Qt5::SerialPort)
 
     ament_target_dependencies(sanhum_robot
         rclcpp

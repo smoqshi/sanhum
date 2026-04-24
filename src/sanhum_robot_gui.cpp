@@ -18,6 +18,8 @@
 #include <QProgressBar>
 #include <QLCDNumber>
 #include <QDial>
+#include <thread>
+#include <chrono>
 #include <QTabWidget>
 #include <QStackedWidget>
 #include <QMessageBox>
