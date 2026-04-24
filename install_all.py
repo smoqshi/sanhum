@@ -520,8 +520,9 @@ class UniversalInstaller:
             if not (src_dir / "sanhum").exists():
                 shutil.copytree(self.project_root, src_dir / "sanhum", ignore=ignore_nested_workspace)
                 
-            # Build with colcon
-            success, stdout, stderr = self.run_command("colcon build", cwd=workspace_dir)
+            # Build with colcon (optimized for speed)
+            self.color_print("Building with parallel compilation (this may take a few minutes)...", 'blue')
+            success, stdout, stderr = self.run_command("colcon build --parallel-workers 4 --cmake-args -DCMAKE_BUILD_TYPE=Release", cwd=workspace_dir)
             if not success:
                 self.color_print("Build failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
