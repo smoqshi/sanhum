@@ -407,7 +407,15 @@ class UniversalInstaller:
             "git",
             "python3-pip",
             "python3-vcstool",
-            "python3-colcon-common-extensions"
+            "python3-colcon-common-extensions",
+            "libqt5-dev",
+            "qtbase5-dev",
+            "libqt5serialport5-dev",
+            "libopencv-dev",
+            "ros-jazzy-nav-msgs",
+            "ros-jazzy-vision-msgs",
+            "ros-jazzy-sensor-msgs",
+            "ros-jazzy-geometry-msgs"
         ]
         
         for package in packages:
