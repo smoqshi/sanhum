@@ -220,11 +220,11 @@ class UniversalInstaller:
             color_code = self.colors.get(color, '')
             print(f"{color_code}{text}{self.colors['nc']}")
             
-    def run_command(self, cmd, shell=True, check=True, capture_output=True):
+    def run_command(self, cmd, shell=True, check=True, capture_output=True, cwd=None):
         """Run a command and return result"""
         try:
             result = subprocess.run(cmd, shell=shell, check=check, 
-                              capture_output=capture_output, text=True)
+                              capture_output=capture_output, text=True, cwd=cwd)
             return result.returncode == 0, result.stdout, result.stderr
         except subprocess.CalledProcessError as e:
             return False, e.stdout, e.stderr
