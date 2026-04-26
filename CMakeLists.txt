@@ -147,6 +147,8 @@ else()
         src/arduino_sensors.cpp
     )
 
+    set_target_properties(sanhum_robot PROPERTIES AUTOMOC ON)
+
     target_compile_definitions(sanhum_robot PRIVATE PLATFORM_LINUX PLATFORM_PI)
 
     target_include_directories(sanhum_robot PRIVATE include)
