@@ -1,14 +1,16 @@
-raspberry_pi:
-  motor_pins:
-    left_motor_1: 17
-    left_motor_2: 27
-    right_motor_1: 22
-    right_motor_2: 23
+sanhum_robot_node:
+  ros__parameters:
+    raspberry_pi:
+      motor_pins:
+        left_motor_1: 17
+        left_motor_2: 27
+        right_motor_1: 22
+        right_motor_2: 23
 
-  serial_ports:
-    esp32:
-      port: /dev/ttyUSB0
-      baud_rate: 115200
-    arduino_nano:
-      port: /dev/ttyUSB1
-      baud_rate: 9600
+      serial_ports:
+        esp32:
+          port: /dev/ttyUSB0
+          baud_rate: 115200
+        arduino_nano:
+          port: /dev/ttyUSB1
+          baud_rate: 9600
