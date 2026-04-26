@@ -140,7 +140,7 @@ else()
         cv_bridge
     )
 
-    install(TARGETS sanhum_robot_gui_cpp DESTINATION lib/${PROJECT_NAME})
+    install(TARGETS sanhum_robot_gui_cpp DESTINATION lib)
 
     # Robot node
     add_executable(sanhum_robot
@@ -168,7 +168,7 @@ else()
         sensor_msgs
     )
 
-    install(TARGETS sanhum_robot DESTINATION lib/${PROJECT_NAME})
+    install(TARGETS sanhum_robot DESTINATION lib)
 
 endif()
 
