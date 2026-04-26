@@ -145,6 +145,8 @@ else()
         src/motor_driver.cpp
         src/esp32_driver.cpp
         src/arduino_sensors.cpp
+        include/esp32_driver.h
+        include/arduino_sensors.h
     )
 
     set_target_properties(sanhum_robot PROPERTIES AUTOMOC ON)
