@@ -109,6 +109,9 @@ else()
         src/cameras.cpp
         src/wifi_server.cpp
         src/yolo_detector.cpp
+        include/esp32_driver.h
+        include/arduino_sensors.h
+        include/wifi_server.h
     )
 
     target_compile_definitions(sanhum_robot_gui_cpp PRIVATE PLATFORM_LINUX HIGH_PERFORMANCE)
