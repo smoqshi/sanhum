@@ -608,7 +608,11 @@ class UniversalInstaller:
             else:
                 # Use MinGW-w64 as alternative
                 mingw_path = Path("C:/mingw64")
-                if not mingw_path.exists():
+                mingw_gcc = mingw_path / "bin" / "gcc.exe"
+                mingw_gpp = mingw_path / "bin" / "g++.exe"
+                mingw_make = mingw_path / "bin" / "mingw32-make.exe"
+
+                if not mingw_path.exists() or not mingw_gcc.exists():
                     self.color_print("Installing MinGW-w64 compiler...", 'blue')
                     # Download and install MinGW-w64
                     mingw_url = "https://github.com/niXman/mingw-builds-binaries/releases/download/13.2.0-rt_v11-rev1/x86_64-13.2.0-release-posix-seh-ucrt-rt_v11-rev1.7z"
@@ -630,9 +634,16 @@ class UniversalInstaller:
                     except ImportError:
                         self.color_print("py7zr not available, skipping MinGW installation", 'yellow')
                         self.color_print("Please install MinGW-w64 manually from https://www.mingw-w64.org/", 'yellow')
+                        return False
+
+                # Verify MinGW installation
+                if not mingw_gcc.exists():
+                    self.color_print(f"✗ MinGW compiler not found at {mingw_gcc}", 'red')
+                    self.color_print("Please install MinGW-w64 manually", 'yellow')
+                    return False
 
                 # Use MinGW toolchain
-                cmake_cmd = f'cmake .. -G "MinGW Makefiles" -DCMAKE_C_COMPILER=C:/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/mingw64/bin/g++.exe -DCMAKE_MAKE_PROGRAM=C:/mingw64/bin/mingw32-make.exe -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
+                cmake_cmd = f'cmake .. -G "MinGW Makefiles" -DCMAKE_C_COMPILER={mingw_gcc} -DCMAKE_CXX_COMPILER={mingw_gpp} -DCMAKE_MAKE_PROGRAM={mingw_make} -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
                 self.color_print("Using MinGW-w64 compiler...", 'blue')
 
             # Configure CMake
