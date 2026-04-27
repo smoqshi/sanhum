@@ -140,7 +140,7 @@ else()
         cv_bridge
     )
 
-    install(TARGETS sanhum_robot_gui_cpp DESTINATION lib)
+    install(TARGETS sanhum_robot_gui_cpp DESTINATION lib/${PROJECT_NAME})
 
     # Robot node
     add_executable(sanhum_robot
@@ -168,14 +168,14 @@ else()
         sensor_msgs
     )
 
-    install(TARGETS sanhum_robot DESTINATION lib)
+    install(TARGETS sanhum_robot DESTINATION lib/${PROJECT_NAME})
 
 endif()
 
 # Install common launch and config files
 install(
     DIRECTORY launch config
-    DESTINATION share
+    DESTINATION share/${PROJECT_NAME}
 )
 
 ament_package()
