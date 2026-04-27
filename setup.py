@@ -471,10 +471,17 @@ class UniversalInstaller:
 
         # Install colcon (ROS2 build tool)
         self.color_print("Installing colcon (ROS2 build tool)...", 'blue')
-        success, _, _ = self.run_command("pip install colcon-common-extensions")
+        success, stdout, stderr = self.run_command("pip install colcon-common-extensions")
         if not success:
-            self.color_print("Failed to install colcon", 'red')
-            return False
+            self.color_print("Failed to install colcon via pip", 'red')
+            self.color_print(f"Error: {stderr}", 'red')
+            self.color_print("Trying alternative: pip install colcon-ros-domain-observer", 'yellow')
+            success, stdout, stderr = self.run_command("pip install colcon-ros-domain-observer")
+            if not success:
+                self.color_print("Failed to install colcon", 'red')
+                self.color_print(f"Error: {stderr}", 'red')
+                self.color_print("Please install colcon manually: pip install colcon-common-extensions", 'yellow')
+                return False
         self.color_print("✓ colcon installed successfully", 'green')
 
         self.color_print("✓ Windows dependencies installed successfully", 'green')
