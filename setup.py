@@ -632,9 +632,43 @@ class UniversalInstaller:
                         Path(mingw_archive).unlink()
                         self.color_print("✓ MinGW-w64 installed successfully", 'green')
                     except ImportError:
-                        self.color_print("py7zr not available, skipping MinGW installation", 'yellow')
-                        self.color_print("Please install MinGW-w64 manually from https://www.mingw-w64.org/", 'yellow')
-                        return False
+                        # Try to install py7zr automatically
+                        self.color_print("py7zr not available, installing...", 'blue')
+                        success, _, _ = self.run_command("pip install py7zr")
+                        if success:
+                            import py7zr
+                            self.color_print("Extracting MinGW-w64...", 'blue')
+                            with py7zr.SevenZipFile(mingw_archive, mode='r') as z:
+                                z.extractall("C:/")
+
+                            # Clean up
+                            Path(mingw_archive).unlink()
+                            self.color_print("✓ MinGW-w64 installed successfully", 'green')
+                        else:
+                            # Try using 7-Zip if available
+                            self.color_print("Trying to use 7-Zip...", 'blue')
+                            seven_zip_paths = [
+                                "C:/Program Files/7-Zip/7z.exe",
+                                "C:/Program Files (x86)/7-Zip/7z.exe"
+                            ]
+                            seven_zip = None
+                            for path in seven_zip_paths:
+                                if Path(path).exists():
+                                    seven_zip = path
+                                    break
+
+                            if seven_zip:
+                                success, _, _ = self.run_command(f'"{seven_zip}" x {mingw_archive} -oC:/')
+                                if success:
+                                    Path(mingw_archive).unlink()
+                                    self.color_print("✓ MinGW-w64 installed successfully using 7-Zip", 'green')
+                                else:
+                                    self.color_print("Failed to extract with 7-Zip", 'red')
+                                    return False
+                            else:
+                                self.color_print("✗ Neither py7zr nor 7-Zip available", 'red')
+                                self.color_print("Please install MinGW-w64 manually from https://www.mingw-w64.org/", 'yellow')
+                                return False
 
                 # Verify MinGW installation
                 if not mingw_gcc.exists():
