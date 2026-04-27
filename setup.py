@@ -44,15 +44,63 @@ class UniversalInstaller:
         self.platform = platform.system().lower()
         self.script_dir = Path(__file__).parent
         self.project_root = self.script_dir.parent
-        
+
         # Colors for output
         self.colors = {
             'red': '\033[0;31m',
             'green': '\033[0;32m',
             'yellow': '\033[1;33m',
             'blue': '\033[0;34m',
+            'cyan': '\033[0;36m',
             'nc': '\033[0m'  # No Color
         }
+
+        # Installation steps tracking
+        self.steps = [
+            "Check system requirements",
+            "Install ROS2 Jazzy",
+            "Install dependencies",
+            "Build project",
+            "Setup environment"
+        ]
+        self.current_step = 0
+        self.completed_steps = []
+
+    def print_installation_state(self):
+        """Print visual representation of installation state"""
+        print()
+        self.color_print("Installation Progress:", 'cyan')
+        print("┌" + "─" * 50 + "┐")
+
+        for i, step in enumerate(self.steps):
+            if i < self.current_step:
+                # Completed step
+                status = "✓"
+                color = 'green'
+            elif i == self.current_step:
+                # Current step
+                status = "►"
+                color = 'yellow'
+            else:
+                # Pending step
+                status = "○"
+                color = 'blue'
+
+            step_text = f"{status} {step}"
+            if self.platform == 'windows':
+                print(f"│ {step_text:<48} │")
+            else:
+                color_code = self.colors.get(color, '')
+                print(f"│ {color_code}{step_text:<48}{self.colors['nc']} │")
+
+        print("└" + "─" * 50 + "┘")
+        print()
+
+    def advance_step(self):
+        """Advance to next installation step"""
+        self.completed_steps.append(self.steps[self.current_step])
+        self.current_step += 1
+        self.print_installation_state()
         
     def check_modules(self):
         """Check if required modules and dependencies are available"""
@@ -230,6 +278,11 @@ class UniversalInstaller:
                 return False
         
         return all_checks_passed
+
+    def complete_step(self, step_name):
+        """Mark current step as complete and advance"""
+        self.color_print(f"✓ {step_name} completed", 'green')
+        self.advance_step()
     
     def print_header(self):
         print("=" * 60)
@@ -247,6 +300,9 @@ class UniversalInstaller:
         print()
         self.color_print("Estimated time: 10-30 minutes (depending on system)", 'yellow')
         print()
+
+        # Show initial installation state
+        self.print_installation_state()
         
     def color_print(self, text, color='white'):
         if self.platform == 'windows':
@@ -330,6 +386,7 @@ class UniversalInstaller:
             Path(ros2_zip).unlink()
 
             self.color_print("✓ ROS2 Jazzy installed successfully at C:/dev/ros2/jazzy", 'green')
+            self.complete_step("Install ROS2 Jazzy")
             return True
 
         except Exception as e:
@@ -407,6 +464,7 @@ class UniversalInstaller:
             self.color_print("✓ vcpkg integrated with Visual Studio", 'green')
 
         self.color_print("✓ Windows dependencies installed successfully", 'green')
+        self.complete_step("Install dependencies")
         return True
         
     def install_linux_ros2(self):
@@ -425,6 +483,7 @@ class UniversalInstaller:
         if success:
             self.color_print("✓ ROS2 Jazzy already installed", 'green')
             self.color_print("  Skipping ROS2 installation", 'blue')
+            self.complete_step("Install ROS2 Jazzy")
             return True
 
         # Update package list
@@ -465,6 +524,7 @@ class UniversalInstaller:
             progress.increment()
 
         self.color_print("✓ ROS2 Jazzy installed successfully", 'green')
+        self.complete_step("Install ROS2 Jazzy")
         return True
         
     def install_linux_dependencies(self):
@@ -515,6 +575,7 @@ class UniversalInstaller:
             self.color_print(f"  ✓ {package} installed", 'green')
 
         self.color_print("✓ Linux dependencies installed successfully", 'green')
+        self.complete_step("Install dependencies")
         return True
         
     def build_project(self):
@@ -631,6 +692,7 @@ class UniversalInstaller:
                 return False
 
         self.color_print("✓ Project built successfully", 'green')
+        self.complete_step("Build project")
         return True
         
     def setup_environment(self):
@@ -677,6 +739,7 @@ ros2 launch sanhum main.launch.py
                 self.color_print("✓ Added workspace to bashrc", 'green')
 
         self.color_print("✓ Environment setup completed", 'green')
+        self.complete_step("Setup environment")
         return True
         
     def install_all(self):
@@ -687,6 +750,7 @@ ros2 launch sanhum main.launch.py
         self.color_print("[Step 1/5] Checking system requirements...", 'blue')
         if not self.check_modules():
             return False
+        self.complete_step("Check system requirements")
 
         try:
             # Platform-specific installation
