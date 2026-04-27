@@ -1,6 +1,6 @@
 # Sanhum Robot System
 
-A dual-platform ROS2 robot control system featuring a Windows GUI control station and Raspberry Pi robot node with real-time hardware control.
+A platform ROS2 robot control system featuring a Windows GUI control station and Raspberry Pi robot node with real-time hardware control.
 
 ## License
 
