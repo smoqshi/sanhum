@@ -175,7 +175,7 @@ endif()
 # Install common launch and config files
 install(
     DIRECTORY launch config
-    DESTINATION share/${PROJECT_NAME}
+    DESTINATION share
 )
 
 ament_package()
