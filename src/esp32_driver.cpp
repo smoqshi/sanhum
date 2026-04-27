@@ -40,14 +40,36 @@ void Esp32Driver::onSerialReadyRead()
     if (data.isEmpty())
         return;
 
-    // TODO: здесь нужно распарсить протокол от ESP32 и опубликовать JointState.
-    // Пока делаем простую заглушку, чтобы линковка и запуск работали.
+    // Dummy ESP32 protocol parsing - simulate joint states
+    // TODO: Replace with actual protocol parsing from ESP32
+    // Expected format: "S:p1,p2,p3,p4,p5\n" where p1-p5 are joint positions
+    QString str = QString::fromUtf8(data);
+    QStringList lines = str.split('\n', Qt::SkipEmptyParts);
 
+    for (const QString &line : lines) {
+        if (line.startsWith("S:")) {
+            QStringList parts = line.mid(2).split(',');
+            if (parts.size() >= 5) {
+                sensor_msgs::msg::JointState state;
+                state.header.stamp = node_->get_clock()->now();
+                state.name = {"joint1", "joint2", "joint3", "joint4", "joint5"};
+                state.position = {
+                    parts[0].toDouble(),
+                    parts[1].toDouble(),
+                    parts[2].toDouble(),
+                    parts[3].toDouble(),
+                    parts[4].toDouble()
+                };
+                joint_state_pub_->publish(state);
+            }
+        }
+    }
+
+    // If no valid data received, publish dummy state
     sensor_msgs::msg::JointState state;
     state.header.stamp = node_->get_clock()->now();
     state.name = {"joint1", "joint2", "joint3", "joint4", "joint5"};
     state.position = {0.0, 0.0, 0.0, 0.0, 0.0};
-
     joint_state_pub_->publish(state);
 }
 

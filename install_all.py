@@ -414,7 +414,8 @@ class UniversalInstaller:
             "ros-jazzy-nav-msgs",
             "ros-jazzy-vision-msgs",
             "ros-jazzy-sensor-msgs",
-            "ros-jazzy-geometry-msgs"
+            "ros-jazzy-geometry-msgs",
+            "pigpio"
         ]
         
         for package in packages:

@@ -1,7 +1,41 @@
 #include "motor_driver.h"
 #include <chrono>
+#include <cmath>
 
 using namespace std::chrono_literals;
+
+// Dummy GPIO implementation for testing without hardware
+// TODO: Replace with actual pigpio library calls for real hardware
+namespace {
+    // Simulated GPIO pin states
+    int gpio_left_motor_1 = 0;
+    int gpio_left_motor_2 = 0;
+    int gpio_right_motor_1 = 0;
+    int gpio_right_motor_2 = 0;
+
+    // Dummy GPIO functions
+    void gpioSetMode(int pin, int mode) {
+        // TODO: Replace with gpioSetMode(pin, mode) from pigpio
+    }
+
+    void gpioWrite(int pin, int level) {
+        // TODO: Replace with gpioWrite(pin, level) from pigpio
+        // For now, just track the state
+        if (pin == 17) gpio_left_motor_1 = level;
+        if (pin == 27) gpio_left_motor_2 = level;
+        if (pin == 22) gpio_right_motor_1 = level;
+        if (pin == 23) gpio_right_motor_2 = level;
+    }
+
+    int gpioInitialise() {
+        // TODO: Replace with gpioInitialise() from pigpio
+        return 0; // Return 0 on success
+    }
+
+    void gpioTerminate() {
+        // TODO: Replace with gpioTerminate() from pigpio
+    }
+}
 
 MotorDriver::MotorDriver(std::shared_ptr<rclcpp::Node> node)
     : node_(std::move(node))
@@ -18,13 +52,24 @@ MotorDriver::MotorDriver(std::shared_ptr<rclcpp::Node> node)
     odom_timer_ = node_->create_wall_timer(
         20ms, std::bind(&MotorDriver::odomTimerCallback, this));
 
-    // TODO: инициализация pigpio / GPIO драйвера
-    // gpioInitialise();
+    // Initialize dummy GPIO
+    gpioInitialise();
+
+    // Set GPIO pins to output mode
+    gpioSetMode(17, 1); // left_motor_1
+    gpioSetMode(27, 1); // left_motor_2
+    gpioSetMode(22, 1); // right_motor_1
+    gpioSetMode(23, 1); // right_motor_2
 }
 
 MotorDriver::~MotorDriver()
 {
-    // gpioTerminate();
+    // Stop motors and cleanup
+    gpioWrite(17, 0);
+    gpioWrite(27, 0);
+    gpioWrite(22, 0);
+    gpioWrite(23, 0);
+    gpioTerminate();
 }
 
 void MotorDriver::cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
@@ -37,14 +82,35 @@ void MotorDriver::cmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg)
     left_speed_  = v - w * wheel_separation / 2.0;
     right_speed_ = v + w * wheel_separation / 2.0;
 
-    // TODO: конвертировать в PWM/скорость моторов
-    // setLeftMotor(left_speed_);
-    // setRightMotor(right_speed_);
+    // Dummy motor control - set GPIO pins based on speed
+    // TODO: Replace with actual PWM control using pigpio
+    if (left_speed_ > 0.1) {
+        gpioWrite(17, 1); // Forward
+        gpioWrite(27, 0);
+    } else if (left_speed_ < -0.1) {
+        gpioWrite(17, 0); // Reverse
+        gpioWrite(27, 1);
+    } else {
+        gpioWrite(17, 0); // Stop
+        gpioWrite(27, 0);
+    }
+
+    if (right_speed_ > 0.1) {
+        gpioWrite(22, 1); // Forward
+        gpioWrite(23, 0);
+    } else if (right_speed_ < -0.1) {
+        gpioWrite(22, 0); // Reverse
+        gpioWrite(23, 1);
+    } else {
+        gpioWrite(22, 0); // Stop
+        gpioWrite(23, 0);
+    }
 }
 
 void MotorDriver::odomTimerCallback()
 {
-    // TODO: считать реальное смещение по энкодерам
+    // Dummy encoder reading - simulate odometry from commanded speeds
+    // TODO: Replace with actual encoder reading using pigpio
     static double x = 0.0;
     static double y = 0.0;
     static double theta = 0.0;

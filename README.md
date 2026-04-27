@@ -84,14 +84,12 @@ sudo python3 install_all.py
 
 The universal installer automatically:
 - Installs ROS2 Jazzy (downloads on Windows, apt on Linux)
-- Sets up all dependencies (OpenCV, Qt6, build tools)
+- Sets up all dependencies (OpenCV, Qt5, build tools, pigpio)
 - Builds the project with proper configuration
 - Creates startup scripts for easy launching
 - Configures environment variables
 
-### Manual Installation
-
-For detailed manual installation steps, see [INSTALL.md](INSTALL.md).
+**No manual installation required - everything is handled automatically.**
 
 ### Quick Start
 
@@ -105,6 +103,11 @@ start_sanhum.bat
 **Linux/Raspberry Pi:**
 ```bash
 ~/start_sanhum_robot.sh
+```
+
+Or run the executable directly:
+```bash
+/root/sanhum_ws/install/sanhum/lib/sanhum/sanhum_robot --ros-args --params-file /root/sanhum_ws/install/sanhum/share/sanhum/config/raspberry_pi_config.yaml
 ```
 
 ## Boot Procedures
@@ -142,22 +145,23 @@ start_sanhum.bat
 
 2. **Start Robot Node**
    ```bash
-   # Terminal 1: Start ROS2 core (if not running on network)
-   ros2 daemon start
-   
-   # Terminal 2: Launch robot node
-   cd ~/sanhum_ws
-   ros2 launch sanhum raspberry_pi.launch.py
+   # Run the startup script
+   ~/start_sanhum_robot.sh
+   ```
+
+   Or run the executable directly:
+   ```bash
+   /root/sanhum_ws/install/sanhum/lib/sanhum/sanhum_robot --ros-args --params-file /root/sanhum_ws/install/sanhum/share/sanhum/config/raspberry_pi_config.yaml
    ```
 
 3. **Verify Hardware Initialization**
    ```bash
    # Check motor driver
    ros2 topic list | grep odom
-   
+
    # Check ESP32 connection
    ros2 topic list | grep manipulator
-   
+
    # Check Arduino sensors
    ros2 topic list | grep obstacle_sensor
    ```
@@ -188,6 +192,82 @@ start_sanhum.bat
 - **Data format**: `d1,d2,d3,d4,d5,d6\n`
 - **Parameters**: Distances in millimeters
 - **Example**: `450,320,680,1200,890,1500\n`
+
+## Hardware Implementation Status
+
+### Current Implementation (Dummy I/O)
+
+The current codebase includes **dummy I/O implementations** for testing and development without actual hardware. These placeholders simulate hardware behavior and allow the ROS2 node to run and publish/subscribe to topics without requiring physical hardware.
+
+#### Dummy GPIO Control (motor_driver.cpp)
+- **Current behavior**: Simulates GPIO pin states in memory only - does NOT touch actual GPIO pins
+- **Functions implemented**: `gpioSetMode()`, `gpioWrite()`, `gpioInitialise()`, `gpioTerminate()` (dummy implementations)
+- **Motor control**: Simple on/off based on speed threshold (0.1)
+- **Hardware connection**: None - purely simulation for testing
+- **pigpio library**: Included in dependencies for future real hardware use
+- **TODO**: Replace dummy functions with actual pigpio library calls when real hardware is connected
+- **Required changes for real hardware**:
+  ```cpp
+  // Replace dummy functions with pigpio:
+  #include <pigpio.h>
+  gpioSetMode(pin, PI_OUTPUT);
+  gpioWrite(pin, level);
+  gpioInitialise();
+  gpioTerminate();
+  ```
+
+#### Dummy Encoder Reading (motor_driver.cpp)
+- **Current behavior**: Simulates odometry from commanded speeds
+- **Odometry calculation**: Uses kinematic model with commanded velocities
+- **TODO**: Replace with actual encoder reading using pigpio
+- **Required changes**:
+  ```cpp
+  // Add encoder reading:
+  int left_encoder = gpioGetEncoder(left_encoder_pin);
+  int right_encoder = gpioGetEncoder(right_encoder_pin);
+  // Calculate actual position from encoder ticks
+  ```
+
+#### Dummy ESP32 Protocol (esp32_driver.cpp)
+- **Current behavior**: Parses "S:p1,p2,p3,p4,p5" format and publishes dummy states
+- **Protocol implemented**: Basic joint state parsing
+- **Fallback**: Publishes zero positions if no valid data received
+- **TODO**: Implement actual ESP32 communication protocol
+- **Required changes**:
+  - Define actual ESP32 protocol format
+  - Add error handling and validation
+  - Implement bidirectional communication
+
+#### Arduino Sensors (arduino_sensors.cpp)
+- **Current behavior**: Reads serial data and parses distance sensor format
+- **Protocol implemented**: "d1,d2,d3,d4,d5,d6" format (distances in mm)
+- **Status**: Functional - reads from actual serial port
+- **TODO**: Verify with actual Arduino hardware
+
+### To Enable Real Hardware Control
+
+**Note**: All dependencies including pigpio are installed automatically by the install script.
+
+1. **Replace dummy GPIO functions** in `motor_driver.cpp`:
+   - Remove dummy namespace
+   - Add `#include <pigpio.h>`
+   - Replace dummy functions with actual pigpio calls
+   - Add PWM control for variable speed
+
+2. **Implement encoder reading**:
+   - Connect encoder hardware to GPIO pins
+   - Add encoder reading functions
+   - Calculate actual odometry from encoder ticks
+
+3. **Complete ESP32 protocol**:
+   - Define actual communication protocol with ESP32
+   - Add proper error handling
+   - Implement feedback loop
+
+4. **Test with hardware**:
+   - Verify GPIO pin assignments match hardware
+   - Test motor control with safety precautions
+   - Calibrate sensors and encoders
 
 ## Troubleshooting
 
