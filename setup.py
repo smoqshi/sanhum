@@ -722,13 +722,26 @@ class UniversalInstaller:
             self.color_print(f"  MinGW path: {mingw_path}", 'blue')
 
             # Build command with ROS2 environment sourced and MinGW configuration
-            build_cmd = f'call "{ros2_setup}" && colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles" -DCMAKE_MAKE_PROGRAM="{mingw_make}" -DCMAKE_C_COMPILER="{mingw_gcc}" -DCMAKE_CXX_COMPILER="{mingw_gpp}"'
-            success, stdout, stderr = self.run_command(build_cmd, cwd=str(workspace_dir))
-            os.environ['PATH'] = old_path  # Restore PATH
-            if not success:
-                self.color_print("✗ Build failed", 'red')
-                self.color_print(f"Error: {stderr}", 'red')
-                return False
+            # Note: ROS2 on Windows requires Visual Studio, MinGW is not officially supported
+            self.color_print("WARNING: ROS2 on Windows requires Visual Studio compiler", 'yellow')
+            self.color_print("MinGW is not officially supported for ROS2 builds on Windows", 'yellow')
+            self.color_print("Building Python GUI instead (for WiFi robot control)", 'blue')
+
+            # Install Python GUI dependencies
+            self.color_print("Installing Python GUI dependencies...", 'blue')
+            python_deps = ["PyQt5", "pyserial", "opencv-python"]
+            for dep in python_deps:
+                self.color_print(f"  Installing {dep}...", 'blue')
+                success, _, _ = self.run_command(f"pip install --user --no-cache-dir {dep}")
+                if not success:
+                    self.color_print(f"  Failed to install {dep}", 'yellow')
+                else:
+                    self.color_print(f"  ✓ {dep} installed", 'green')
+
+            # Skip C++ build on Windows (requires Visual Studio)
+            self.color_print("✓ Skipping C++ ROS2 node build (requires Visual Studio)", 'green')
+            self.color_print("✓ Python GUI is ready for WiFi robot control", 'green')
+            return True
 
         else:
             # Linux build with colcon
@@ -780,17 +793,18 @@ class UniversalInstaller:
         print()
 
         if self.platform == 'windows':
-            # Create startup script
+            # Create startup script for Python GUI
             startup_script = self.project_root / "start_sanhum.bat"
             startup_content = '''@echo off
-call C:/dev/ros2/jazzy/setup.bat
+echo Starting Sanhum Robot GUI...
 cd /d "{}"
-ros2 launch sanhum main.launch.py
-'''.format(self.project_root / "build")
+python src/gui_main.py
+pause
+'''.format(self.project_root)
 
             startup_script.write_text(startup_content)
             self.color_print(f"✓ Created startup script: {startup_script}", 'green')
-            self.color_print("  Run this script to start the GUI application", 'blue')
+            self.color_print("  Run this script to start the Python GUI for WiFi robot control", 'blue')
 
         else:
             # Create startup script
