@@ -646,9 +646,34 @@ class UniversalInstaller:
                 self.color_print(f"✗ ROS2 not found at {ros2_setup}", 'red')
                 return False
 
+            # Find colcon.exe location
+            import os
+            old_path = os.environ.get('PATH', '')
+            colcon_paths = [
+                Path.home() / "AppData" / "Roaming" / "Python" / "Python314" / "Scripts",
+                Path.home() / "AppData" / "Roaming" / "Python" / "Python313" / "Scripts",
+                Path.home() / "AppData" / "Roaming" / "Python" / "Python312" / "Scripts",
+                Path.home() / "AppData" / "Local" / "Programs" / "Python" / "Python314" / "Scripts",
+                Path.home() / "AppData" / "Local" / "Programs" / "Python" / "Python313" / "Scripts",
+            ]
+
+            colcon_path = None
+            for path in colcon_paths:
+                if (path / "colcon.exe").exists():
+                    colcon_path = path / "colcon.exe"
+                    os.environ['PATH'] = str(path) + ';' + old_path
+                    self.color_print(f"  Found colcon at: {colcon_path}", 'blue')
+                    break
+
+            if not colcon_path:
+                self.color_print("✗ colcon.exe not found in Python Scripts directories", 'red')
+                self.color_print("  Please install colcon manually", 'yellow')
+                return False
+
             # Build command with ROS2 environment sourced
             build_cmd = f'call "{ros2_setup}" && colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release'
             success, stdout, stderr = self.run_command(build_cmd, cwd=str(workspace_dir))
+            os.environ['PATH'] = old_path  # Restore PATH
             if not success:
                 self.color_print("✗ Build failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
