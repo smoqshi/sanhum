@@ -84,7 +84,7 @@ sudo python3 install_all.py
 
 The universal installer automatically:
 - Installs ROS2 Jazzy (downloads on Windows, apt on Linux)
-- Sets up all dependencies (OpenCV, Qt5, build tools, pigpio)
+- Sets up all dependencies (OpenCV, Qt5, build tools, python3-pigpio)
 - Builds the project with proper configuration
 - Creates startup scripts for easy launching
 - Configures environment variables
@@ -204,11 +204,10 @@ The current codebase includes **dummy I/O implementations** for testing and deve
 - **Functions implemented**: `gpioSetMode()`, `gpioWrite()`, `gpioInitialise()`, `gpioTerminate()` (dummy implementations)
 - **Motor control**: Simple on/off based on speed threshold (0.1)
 - **Hardware connection**: None - purely simulation for testing
-- **pigpio library**: Included in dependencies for future real hardware use
-- **TODO**: Replace dummy functions with actual pigpio library calls when real hardware is connected
+- **TODO**: Replace dummy functions with actual GPIO library calls when real hardware is connected
 - **Required changes for real hardware**:
   ```cpp
-  // Replace dummy functions with pigpio:
+  // Replace dummy functions with pigpio (Raspberry Pi) or other GPIO library:
   #include <pigpio.h>
   gpioSetMode(pin, PI_OUTPUT);
   gpioWrite(pin, level);
@@ -246,7 +245,7 @@ The current codebase includes **dummy I/O implementations** for testing and deve
 
 ### To Enable Real Hardware Control
 
-**Note**: All dependencies including pigpio are installed automatically by the install script.
+**Note**: python3-pigpio is already installed automatically by the install script.
 
 1. **Replace dummy GPIO functions** in `motor_driver.cpp`:
    - Remove dummy namespace

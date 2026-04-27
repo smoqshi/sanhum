@@ -415,7 +415,7 @@ class UniversalInstaller:
             "ros-jazzy-vision-msgs",
             "ros-jazzy-sensor-msgs",
             "ros-jazzy-geometry-msgs",
-            "pigpio"
+            "python3-pigpio"
         ]
         
         for package in packages:
