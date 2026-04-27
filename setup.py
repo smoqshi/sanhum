@@ -670,13 +670,59 @@ class UniversalInstaller:
                 self.color_print("  Please install colcon manually", 'yellow')
                 return False
 
-            # Set environment variables for MinGW to avoid Visual Studio requirement
+            # Install MinGW if not present
+            mingw_path = Path("C:/mingw64")
+            mingw_gcc = mingw_path / "bin" / "gcc.exe"
+            mingw_gpp = mingw_path / "bin" / "g++.exe"
+            mingw_make = mingw_path / "bin" / "mingw32-make.exe"
+
+            if not mingw_gcc.exists():
+                self.color_print("Installing MinGW-w64 compiler...", 'blue')
+                mingw_url = "https://github.com/niXman/mingw-builds-binaries/releases/download/13.2.0-rt_v11-rev1/x86_64-13.2.0-release-posix-seh-ucrt-rt_v11-rev1.7z"
+                mingw_archive = "mingw64.7z"
+
+                if not self.download_file(mingw_url, mingw_archive):
+                    return False
+
+                # Extract MinGW-w64
+                try:
+                    import py7zr
+                    self.color_print("Extracting MinGW-w64...", 'blue')
+                    with py7zr.SevenZipFile(mingw_archive, mode='r') as z:
+                        z.extractall("C:/")
+
+                    Path(mingw_archive).unlink()
+                    self.color_print("✓ MinGW-w64 installed successfully", 'green')
+                except ImportError:
+                    self.color_print("py7zr not available, installing...", 'blue')
+                    success, _, _ = self.run_command("pip install py7zr")
+                    if success:
+                        import py7zr
+                        self.color_print("Extracting MinGW-w64...", 'blue')
+                        with py7zr.SevenZipFile(mingw_archive, mode='r') as z:
+                            z.extractall("C:/")
+
+                        Path(mingw_archive).unlink()
+                        self.color_print("✓ MinGW-w64 installed successfully", 'green')
+                    else:
+                        self.color_print("✗ Cannot extract MinGW archive", 'red')
+                        return False
+
+            # Verify MinGW installation
+            if not mingw_gcc.exists():
+                self.color_print(f"✗ MinGW compiler not found at {mingw_gcc}", 'red')
+                return False
+
+            # Add MinGW to PATH and set CMake variables
             self.color_print("Configuring for MinGW build...", 'blue')
-            os.environ['CC'] = 'gcc'
-            os.environ['CXX'] = 'g++'
+            os.environ['PATH'] = str(mingw_path / "bin") + ';' + os.environ['PATH']
+            os.environ['CMAKE_MAKE_PROGRAM'] = str(mingw_make)
+            os.environ['CMAKE_C_COMPILER'] = str(mingw_gcc)
+            os.environ['CMAKE_CXX_COMPILER'] = str(mingw_gpp)
+            self.color_print(f"  MinGW path: {mingw_path}", 'blue')
 
             # Build command with ROS2 environment sourced and MinGW configuration
-            build_cmd = f'call "{ros2_setup}" && set CC=gcc && set CXX=g++ && colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"'
+            build_cmd = f'call "{ros2_setup}" && colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles" -DCMAKE_MAKE_PROGRAM="{mingw_make}" -DCMAKE_C_COMPILER="{mingw_gcc}" -DCMAKE_CXX_COMPILER="{mingw_gpp}"'
             success, stdout, stderr = self.run_command(build_cmd, cwd=str(workspace_dir))
             os.environ['PATH'] = old_path  # Restore PATH
             if not success:
