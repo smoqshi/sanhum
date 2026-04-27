@@ -559,9 +559,7 @@ ros2 launch sanhum main.launch.py
             # Create startup script
             startup_script = Path.home() / "start_sanhum_robot.sh"
             startup_content = '''#!/bin/bash
-source /opt/ros/jazzy/setup.bash
-source ~/sanhum_ws/install/setup.bash
-ros2 launch sanhum raspberry_pi.launch.py
+/root/sanhum_ws/install/sanhum/lib/sanhum/sanhum_robot --ros-args --params-file /root/sanhum_ws/install/sanhum/share/sanhum/config/raspberry_pi_config.yaml
 '''
             startup_script.write_text(startup_content)
             startup_script.chmod(0o755)
