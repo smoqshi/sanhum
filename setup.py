@@ -11,7 +11,33 @@ import platform
 import urllib.request
 import zipfile
 import shutil
+import time
 from pathlib import Path
+
+class ProgressBar:
+    """Simple text-based progress bar"""
+    def __init__(self, total=100, prefix='', suffix='', length=50):
+        self.total = total
+        self.prefix = prefix
+        self.suffix = suffix
+        self.length = length
+        self.current = 0
+
+    def update(self, current):
+        self.current = current
+        self._print()
+
+    def increment(self):
+        self.current += 1
+        self._print()
+
+    def _print(self):
+        percent = min(100, (self.current / self.total) * 100)
+        filled_length = int(self.length * self.current // self.total)
+        bar = '█' * filled_length + '-' * (self.length - filled_length)
+        print(f'\r{self.prefix} |{bar}| {percent:.1f}% {self.suffix}', end='', flush=True)
+        if self.current >= self.total:
+            print()
 
 class UniversalInstaller:
     def __init__(self):
@@ -207,10 +233,19 @@ class UniversalInstaller:
     
     def print_header(self):
         print("=" * 60)
-        print("Sanhum Robot Universal Installer")
+        print("Sanhum Robot Universal Installer v1.0.0")
         print(f"Platform: {platform.system()} {platform.release()}")
         print(f"Python: {sys.version}")
         print("=" * 60)
+        print()
+        self.color_print("This installer will:", 'blue')
+        self.color_print("  1. Check system requirements and dependencies", 'blue')
+        self.color_print("  2. Install ROS2 Jazzy (if not already installed)", 'blue')
+        self.color_print("  3. Install required dependencies (Qt, OpenCV, etc.)", 'blue')
+        self.color_print("  4. Build the Sanhum robot project", 'blue')
+        self.color_print("  5. Configure environment and startup scripts", 'blue')
+        print()
+        self.color_print("Estimated time: 10-30 minutes (depending on system)", 'yellow')
         print()
         
     def color_print(self, text, color='white'):
@@ -253,154 +288,191 @@ class UniversalInstaller:
             
     def install_windows_ros2(self):
         """Install ROS2 Jazzy on Windows"""
-        self.color_print("[Windows] Installing ROS2 Jazzy...", 'blue')
-        
+        self.color_print("[Step 2/5] Installing ROS2 Jazzy...", 'blue')
+        self.color_print("This may take 5-10 minutes depending on your internet speed", 'yellow')
+        print()
+
         if not self.check_admin():
             self.color_print("ERROR: Administrator privileges required for ROS2 installation", 'red')
             self.color_print("Please run this script as Administrator", 'yellow')
             return False
-            
+
+        # Check if ROS2 is already installed
+        if Path("C:/dev/ros2/jazzy/setup.bat").exists():
+            self.color_print("✓ ROS2 Jazzy already installed at C:/dev/ros2/jazzy", 'green')
+            self.color_print("  Skipping ROS2 installation", 'blue')
+            return True
+
         # ROS2 download URL (adjust as needed)
         ros2_url = "https://github.com/ros2/ros2/releases/download/jazzy-20241206/ros2-jazzy-20241206-windows-x86_64.zip"
         ros2_zip = "ros2-jazzy.zip"
         ros2_dir = Path("C:/dev/ros2")
-        
+
         # Download ROS2
+        self.color_print("Downloading ROS2 Jazzy (~1.5 GB)...", 'blue')
         if not self.download_file(ros2_url, ros2_zip):
             return False
-            
+
         # Extract ROS2
         try:
-            self.color_print("Extracting ROS2...", 'blue')
+            self.color_print("Extracting ROS2 (this may take a few minutes)...", 'blue')
             with zipfile.ZipFile(ros2_zip, 'r') as zip_ref:
                 zip_ref.extractall(ros2_dir.parent)
-            
+
             # Rename to expected directory
             extracted_dir = ros2_dir.parent / "ros2-jazzy-20241206-windows-x86_64"
             if extracted_dir.exists():
                 if ros2_dir.exists():
                     shutil.rmtree(ros2_dir)
                 extracted_dir.rename(ros2_dir)
-                
+
             # Clean up
             Path(ros2_zip).unlink()
-            
-            self.color_print("ROS2 installed successfully", 'green')
+
+            self.color_print("✓ ROS2 Jazzy installed successfully at C:/dev/ros2/jazzy", 'green')
             return True
-            
+
         except Exception as e:
             self.color_print(f"Failed to extract ROS2: {e}", 'red')
             return False
             
     def install_windows_dependencies(self):
         """Install Windows dependencies (vcpkg, Qt, OpenCV)"""
-        self.color_print("[Windows] Installing dependencies...", 'blue')
-        
+        self.color_print("[Step 3/5] Installing Windows dependencies...", 'blue')
+        self.color_print("This may take 10-20 minutes depending on your system", 'yellow')
+        print()
+
         # Install vcpkg
         vcpkg_dir = Path("C:/vcpkg")
         if not vcpkg_dir.exists():
-            self.color_print("Installing vcpkg...", 'blue')
+            self.color_print("Installing vcpkg package manager...", 'blue')
             success, _, _ = self.run_command("git clone https://github.com/Microsoft/vcpkg.git C:/vcpkg")
             if not success:
                 self.color_print("Failed to clone vcpkg", 'red')
                 return False
-                
+
             # Bootstrap vcpkg
+            self.color_print("Bootstrapping vcpkg...", 'blue')
             success, _, _ = self.run_command("cd C:/vcpkg && bootstrap-vcpkg.bat")
             if not success:
                 self.color_print("Failed to bootstrap vcpkg", 'red')
                 return False
-                
+            self.color_print("✓ vcpkg installed successfully", 'green')
+        else:
+            self.color_print("✓ vcpkg already installed", 'green')
+
         # Clean up any existing vcpkg locks
         self.color_print("Cleaning up vcpkg locks...", 'blue')
         lock_files = [
             "C:/vcpkg/installed/vcpkg/vcpkg-running.lock",
             "C:/vcpkg/buildtrees/vcpkg-running.lock"
         ]
-        
+
         for lock_file in lock_files:
             lock_path = Path(lock_file)
             if lock_path.exists():
                 try:
                     lock_path.unlink()
-                    self.color_print(f"Removed lock: {lock_file}", 'yellow')
+                    self.color_print(f"  Removed lock: {lock_file}", 'yellow')
                 except Exception as e:
-                    self.color_print(f"Could not remove lock {lock_file}: {e}", 'yellow')
-        
+                    self.color_print(f"  Could not remove lock {lock_file}: {e}", 'yellow')
+
         # Install packages with vcpkg
         packages = [
             "opencv4[core,contrib]:x64-windows",
             "qt6:x64-windows"
         ]
-        
-        for package in packages:
-            self.color_print(f"Installing {package}...", 'blue')
+
+        self.color_print("Installing packages via vcpkg...", 'blue')
+        progress = ProgressBar(len(packages), prefix='Progress', suffix='Complete')
+        for i, package in enumerate(packages, 1):
+            self.color_print(f"  Installing {package}...", 'blue')
             success, stdout, stderr = self.run_command(f"C:/vcpkg/vcpkg.exe install {package}")
             if not success:
                 if "vcpkg-running.lock" in stderr:
-                    self.color_print(f"vcpkg is busy. Please wait and try again.", 'yellow')
-                    self.color_print("Or close any other vcpkg processes.", 'yellow')
+                    self.color_print("  vcpkg is busy. Please wait and try again.", 'yellow')
+                    self.color_print("  Or close any other vcpkg processes.", 'yellow')
                     return False
                 else:
-                    self.color_print(f"Failed to install {package}", 'red')
-                    self.color_print(f"Error: {stderr}", 'red')
+                    self.color_print(f"  Failed to install {package}", 'red')
+                    self.color_print(f"  Error: {stderr}", 'red')
                     return False
-                
+            progress.increment()
+            self.color_print(f"  ✓ {package} installed", 'green')
+
         # Integrate with Visual Studio
         self.color_print("Integrating vcpkg with Visual Studio...", 'blue')
         success, _, _ = self.run_command("C:/vcpkg/vcpkg.exe integrate install")
-        
-        self.color_print("Windows dependencies installed successfully", 'green')
+        if success:
+            self.color_print("✓ vcpkg integrated with Visual Studio", 'green')
+
+        self.color_print("✓ Windows dependencies installed successfully", 'green')
         return True
         
     def install_linux_ros2(self):
         """Install ROS2 Jazzy on Linux"""
-        self.color_print("[Linux] Installing ROS2 Jazzy...", 'blue')
-        
+        self.color_print("[Step 2/5] Installing ROS2 Jazzy...", 'blue')
+        self.color_print("This may take 10-20 minutes depending on your system", 'yellow')
+        print()
+
         if not self.check_admin():
             self.color_print("ERROR: sudo privileges required for ROS2 installation", 'red')
-            self.color_print("Please run: sudo python3 install_all.py", 'yellow')
+            self.color_print("Please run: sudo python3 setup.py", 'yellow')
             return False
-            
+
+        # Check if ROS2 is already installed
+        success, _, _ = self.run_command("which ros2", capture_output=True)
+        if success:
+            self.color_print("✓ ROS2 Jazzy already installed", 'green')
+            self.color_print("  Skipping ROS2 installation", 'blue')
+            return True
+
         # Update package list
         self.color_print("Updating package list...", 'blue')
         success, _, _ = self.run_command("sudo apt update")
         if not success:
             self.color_print("Failed to update package list", 'red')
             return False
-            
+        self.color_print("✓ Package list updated", 'green')
+
         # Install ROS2
         commands = [
-            "sudo apt install -y curl gnupg lsb-release",
-            "curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -",
-            "sudo sh -c 'echo \"deb http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main\" > /etc/apt/sources.list.d/ros2.list'",
-            "sudo apt update",
-            "sudo apt install -y ros-jazzy-desktop",
-            "sudo apt install -y python3-rosdep",
-            "sudo rosdep init",
-            "rosdep update"
+            ("Installing curl, gnupg, lsb-release", "sudo apt install -y curl gnupg lsb-release"),
+            ("Adding ROS2 GPG key", "curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -"),
+            ("Adding ROS2 repository", "sudo sh -c 'echo \"deb http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main\" > /etc/apt/sources.list.d/ros2.list'"),
+            ("Updating package list again", "sudo apt update"),
+            ("Installing ROS2 Jazzy Desktop (this will take a while)", "sudo apt install -y ros-jazzy-desktop"),
+            ("Installing python3-rosdep", "sudo apt install -y python3-rosdep"),
+            ("Initializing rosdep", "sudo rosdep init"),
+            ("Updating rosdep database", "rosdep update")
         ]
-        
-        for cmd in commands:
-            self.color_print(f"Running: {cmd}", 'blue')
+
+        progress = ProgressBar(len(commands), prefix='Progress', suffix='Complete')
+        for i, (description, cmd) in enumerate(commands, 1):
+            self.color_print(f"  {description}...", 'blue')
             success, stdout, stderr = self.run_command(cmd)
-            
+
             # Handle rosdep init already initialized case
             if "sudo rosdep init" in cmd and not success and ("already exists" in stderr or "already exists:" in stderr):
-                self.color_print("rosdep already initialized (this is normal)", 'green')
+                self.color_print("  ✓ rosdep already initialized (this is normal)", 'green')
                 success = True
             elif not success:
-                self.color_print(f"Failed: {cmd}", 'red')
-                self.color_print(f"Error: {stderr}", 'red')
+                self.color_print(f"  ✗ Failed: {description}", 'red')
+                self.color_print(f"  Error: {stderr}", 'red')
                 return False
-                
-        self.color_print("ROS2 installed successfully", 'green')
+            else:
+                self.color_print(f"  ✓ {description} completed", 'green')
+            progress.increment()
+
+        self.color_print("✓ ROS2 Jazzy installed successfully", 'green')
         return True
         
     def install_linux_dependencies(self):
         """Install Linux dependencies"""
-        self.color_print("[Linux] Installing dependencies...", 'blue')
-        
+        self.color_print("[Step 3/5] Installing Linux dependencies...", 'blue')
+        self.color_print("This may take 5-10 minutes depending on your system", 'yellow')
+        print()
+
         packages = [
             "build-essential",
             "cmake",
@@ -417,39 +489,51 @@ class UniversalInstaller:
             "ros-jazzy-geometry-msgs",
             "python3-pigpio"
         ]
-        
-        for package in packages:
-            self.color_print(f"Installing {package}...", 'blue')
+
+        self.color_print("Installing system packages...", 'blue')
+        progress = ProgressBar(len(packages), prefix='Progress', suffix='Complete')
+        for i, package in enumerate(packages, 1):
+            self.color_print(f"  Installing {package}...", 'blue')
             success, _, _ = self.run_command(f"sudo apt install -y {package}")
             if not success:
-                self.color_print(f"Failed to install {package}", 'red')
+                self.color_print(f"  ✗ Failed to install {package}", 'red')
                 return False
-                
+            progress.increment()
+            self.color_print(f"  ✓ {package} installed", 'green')
+
         # Install Python packages
         python_packages = ["python3-serial"]
-        for package in python_packages:
-            self.color_print(f"Installing Python package {package}...", 'blue')
+        self.color_print("Installing Python packages...", 'blue')
+        progress = ProgressBar(len(python_packages), prefix='Progress', suffix='Complete')
+        for i, package in enumerate(python_packages, 1):
+            self.color_print(f"  Installing {package}...", 'blue')
             success, _, _ = self.run_command(f"sudo apt install -y {package}")
             if not success:
-                self.color_print(f"Failed to install {package}", 'red')
+                self.color_print(f"  ✗ Failed to install {package}", 'red')
                 return False
-                
-        self.color_print("Linux dependencies installed successfully", 'green')
+            progress.increment()
+            self.color_print(f"  ✓ {package} installed", 'green')
+
+        self.color_print("✓ Linux dependencies installed successfully", 'green')
         return True
         
     def build_project(self):
         """Build project"""
-        self.color_print("Building Sanhum project...", 'blue')
-        
+        self.color_print("[Step 4/5] Building Sanhum project...", 'blue')
+        self.color_print("This may take 5-10 minutes depending on your system", 'yellow')
+        print()
+
         if self.platform == 'windows':
             # Windows build with CMake
             build_dir = self.project_root / "build"
             build_dir.mkdir(exist_ok=True)
-            
+
+            self.color_print("Preparing build directory...", 'blue')
+
             # Check for Visual Studio compiler first
             has_cl, _, _ = self.run_command('where cl', capture_output=True)
             has_cl = has_cl and 'cl.exe' in _
-            
+
             if has_cl:
                 # Use Visual Studio toolchain
                 cmake_cmd = f'cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
@@ -462,54 +546,59 @@ class UniversalInstaller:
                     # Download and install MinGW-w64
                     mingw_url = "https://github.com/niXman/mingw-builds-binaries/releases/download/13.2.0-rt_v11-rev1/x86_64-13.2.0-release-posix-seh-ucrt-rt_v11-rev1.7z"
                     mingw_archive = "mingw64.7z"
-                    
+
                     if not self.download_file(mingw_url, mingw_archive):
                         return False
-                    
+
                     # Extract MinGW-w64
                     try:
                         import py7zr
                         self.color_print("Extracting MinGW-w64...", 'blue')
                         with py7zr.SevenZipFile(mingw_archive, mode='r') as z:
                             z.extractall("C:/")
-                        
+
                         # Clean up
                         Path(mingw_archive).unlink()
-                        self.color_print("MinGW-w64 installed successfully", 'green')
+                        self.color_print("✓ MinGW-w64 installed successfully", 'green')
                     except ImportError:
                         self.color_print("py7zr not available, skipping MinGW installation", 'yellow')
                         self.color_print("Please install MinGW-w64 manually from https://www.mingw-w64.org/", 'yellow')
-                
+
                 # Use MinGW toolchain
                 cmake_cmd = f'cmake .. -G "MinGW Makefiles" -DCMAKE_C_COMPILER=C:/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/mingw64/bin/g++.exe -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
                 self.color_print("Using MinGW-w64 compiler...", 'blue')
-            
+
             # Configure CMake
+            self.color_print("Configuring CMake...", 'blue')
             success, stdout, stderr = self.run_command(cmake_cmd, cwd=build_dir)
             if not success:
-                self.color_print("CMake configuration failed", 'red')
+                self.color_print("✗ CMake configuration failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
                 return False
-                
+            self.color_print("✓ CMake configuration successful", 'green')
+
             # Build
+            self.color_print("Compiling project...", 'blue')
             if has_cl:
                 build_cmd = "cmake --build . --config Release"
             else:
                 build_cmd = "cmake --build . --config Release -- -j4"
-                
+
             success, stdout, stderr = self.run_command(build_cmd, cwd=build_dir)
             if not success:
-                self.color_print("Build failed", 'red')
+                self.color_print("✗ Build failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
                 return False
-                
+
         else:
             # Linux build with colcon
             workspace_dir = Path.home() / "sanhum_ws"
             workspace_dir.mkdir(exist_ok=True)
             src_dir = workspace_dir / "src"
             src_dir.mkdir(exist_ok=True)
-            
+
+            self.color_print("Preparing workspace...", 'blue')
+
             # Copy project files to workspace (avoid nested workspace issues)
             import shutil
             def ignore_nested_workspace(path, names):
@@ -521,29 +610,34 @@ class UniversalInstaller:
                     elif name.endswith('.pyc'):
                         ignored.add(name)
                 return list(ignored)
-                
+
             # Clean up existing corrupted workspace
             if (src_dir / "sanhum").exists():
+                self.color_print("Cleaning existing workspace...", 'blue')
                 shutil.rmtree(src_dir / "sanhum")
-                
+
+            self.color_print("Copying project files to workspace...", 'blue')
             shutil.copytree(self.project_root, src_dir / "sanhum", ignore=ignore_nested_workspace)
-                
+            self.color_print("✓ Project files copied", 'green')
+
             # Build with colcon (optimized for speed)
-            self.color_print("Building with parallel compilation (this may take a few minutes)...", 'blue')
-            self.color_print("Using symlink install for faster builds...", 'blue')
+            self.color_print("Building with colcon (parallel compilation)...", 'blue')
+            self.color_print("  Using 8 parallel workers for faster builds", 'blue')
+            self.color_print("  Using symlink install for faster rebuilds", 'blue')
             success, stdout, stderr = self.run_command("colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release", cwd=workspace_dir)
             if not success:
-                self.color_print("Build failed", 'red')
+                self.color_print("✗ Build failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
                 return False
-                
-        self.color_print("Project built successfully", 'green')
+
+        self.color_print("✓ Project built successfully", 'green')
         return True
         
     def setup_environment(self):
         """Setup environment variables and startup scripts"""
-        self.color_print("Setting up environment...", 'blue')
-        
+        self.color_print("[Step 5/5] Setting up environment...", 'blue')
+        print()
+
         if self.platform == 'windows':
             # Create startup script
             startup_script = self.project_root / "start_sanhum.bat"
@@ -552,10 +646,11 @@ call C:/dev/ros2/jazzy/setup.bat
 cd /d "{}"
 ros2 launch sanhum main.launch.py
 '''.format(self.project_root / "build")
-            
+
             startup_script.write_text(startup_content)
-            self.color_print(f"Created startup script: {startup_script}", 'green')
-            
+            self.color_print(f"✓ Created startup script: {startup_script}", 'green')
+            self.color_print("  Run this script to start the GUI application", 'blue')
+
         else:
             # Create startup script
             startup_script = Path.home() / "start_sanhum_robot.sh"
@@ -564,87 +659,112 @@ ros2 launch sanhum main.launch.py
 '''
             startup_script.write_text(startup_content)
             startup_script.chmod(0o755)
-            self.color_print(f"Created startup script: {startup_script}", 'green')
-            
+            self.color_print(f"✓ Created startup script: {startup_script}", 'green')
+            self.color_print("  Run this script to start the robot node", 'blue')
+
             # Add to bashrc
             bashrc = Path.home() / ".bashrc"
             bashrc_content = bashrc.read_text() if bashrc.exists() else ""
-            
+
             if "source /opt/ros/jazzy/setup.bash" not in bashrc_content:
                 with open(bashrc, 'a') as f:
                     f.write("\n# Sanhum Robot\nsource /opt/ros/jazzy/setup.bash\n")
-                self.color_print("Added ROS2 to bashrc", 'green')
-                
+                self.color_print("✓ Added ROS2 to bashrc", 'green')
+
             if "source ~/sanhum_ws/install/setup.bash" not in bashrc_content:
                 with open(bashrc, 'a') as f:
                     f.write("source ~/sanhum_ws/install/setup.bash\n")
-                self.color_print("Added workspace to bashrc", 'green')
-                
-        self.color_print("Environment setup completed", 'green')
+                self.color_print("✓ Added workspace to bashrc", 'green')
+
+        self.color_print("✓ Environment setup completed", 'green')
         return True
         
     def install_all(self):
         """Main installation function"""
         self.print_header()
-        
+
         # Check modules and dependencies first
+        self.color_print("[Step 1/5] Checking system requirements...", 'blue')
         if not self.check_modules():
             return False
-        
+
         try:
             # Platform-specific installation
             if self.platform == 'windows':
-                self.color_print("Starting Windows installation...", 'blue')
-                
+                self.color_print("\nStarting Windows installation...", 'blue')
+                print()
+
                 # Check if ROS2 is already installed
                 if not Path("C:/dev/ros2/jazzy/setup.bat").exists():
                     if not self.install_windows_ros2():
                         return False
-                        
+
                 if not self.install_windows_dependencies():
                     return False
-                    
+
             elif self.platform == 'linux':
-                self.color_print("Starting Linux installation...", 'blue')
-                
+                self.color_print("\nStarting Linux installation...", 'blue')
+                print()
+
                 if not self.install_linux_ros2():
                     return False
-                    
+
                 if not self.install_linux_dependencies():
                     return False
-                    
+
             else:
                 self.color_print(f"Unsupported platform: {self.platform}", 'red')
                 return False
-                
+
             # Build project
             if not self.build_project():
                 return False
-                
+
             # Setup environment
             if not self.setup_environment():
                 return False
-                
+
             # Success
-            self.color_print("\n" + "=" * 60, 'green')
-            self.color_print("Installation completed successfully!", 'green')
+            print()
             self.color_print("=" * 60, 'green')
-            
+            self.color_print("✓ Installation completed successfully!", 'green')
+            self.color_print("=" * 60, 'green')
+            print()
+
+            # Print summary
+            self.color_print("Installation Summary:", 'blue')
+            self.color_print("  ✓ System requirements checked", 'green')
+            self.color_print("  ✓ ROS2 Jazzy installed", 'green')
+            self.color_print("  ✓ Dependencies installed (Qt, OpenCV, etc.)", 'green')
+            self.color_print("  ✓ Sanhum robot project built", 'green')
+            self.color_print("  ✓ Environment configured", 'green')
+            print()
+
             # Print next steps
-            self.color_print("\nNext steps:", 'blue')
+            self.color_print("Next steps:", 'blue')
             if self.platform == 'windows':
-                self.color_print("  Run: start_sanhum.bat", 'blue')
+                self.color_print("  1. Double-click: start_sanhum.bat", 'blue')
+                self.color_print("  2. Or run from command prompt:", 'blue')
+                self.color_print("     cd /d \"{}\"".format(self.project_root), 'blue')
+                self.color_print("     start_sanhum.bat", 'blue')
             else:
-                self.color_print("  Run: ~/start_sanhum_robot.sh", 'blue')
-                self.color_print("  Or: source ~/.bashrc && ros2 launch sanhum raspberry_pi.launch.py", 'blue')
-                
+                self.color_print("  1. Run: ~/start_sanhum_robot.sh", 'blue')
+                self.color_print("  2. Or source environment and use launch:", 'blue')
+                self.color_print("     source ~/.bashrc", 'blue')
+                self.color_print("     ros2 launch sanhum raspberry_pi.launch.py", 'blue')
+            print()
+
+            self.color_print("For more information, see README.md", 'blue')
+            self.color_print("For security information, see docs/SECURITY.md", 'blue')
+            print()
+
             return True
-            
+
         except KeyboardInterrupt:
-            self.color_print("\nInstallation interrupted by user", 'yellow')
+            self.color_print("\n✗ Installation interrupted by user", 'yellow')
             return False
         except Exception as e:
-            self.color_print(f"Unexpected error: {e}", 'red')
+            self.color_print(f"\n✗ Unexpected error: {e}", 'red')
             return False
 
 def main():
