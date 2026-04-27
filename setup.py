@@ -437,7 +437,8 @@ class UniversalInstaller:
         # Install packages with vcpkg
         packages = [
             "opencv4[core,contrib]:x64-windows",
-            "qt6:x64-windows"
+            "qt5-base:x64-windows",
+            "qt5-serialport:x64-windows"
         ]
 
         self.color_print("Installing packages via vcpkg...", 'blue')

@@ -28,7 +28,7 @@ if(WIN32)
     # --- Windows GUI Build ---
     message(STATUS "Configuring for Windows GUI - High Performance C++")
 
-    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
+    find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTORCC ON)
     set(CMAKE_AUTOUIC ON)
