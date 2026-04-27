@@ -2,6 +2,14 @@
 
 A dual-platform ROS2 robot control system featuring a Windows GUI control station and Raspberry Pi robot node with real-time hardware control.
 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Security
+
+For security policies, vulnerability reporting, and best practices, see [docs/SECURITY.md](docs/SECURITY.md).
+
 ## System Architecture
 
 The Sanhum robot system consists of two main components:
@@ -74,12 +82,12 @@ The Sanhum robot project includes a universal installer that works on all platfo
 
 **Windows (Run as Administrator):**
 ```bash
-python install_all.py
+python setup.py
 ```
 
 **Linux/Raspberry Pi:**
 ```bash
-sudo python3 install_all.py
+sudo python3 setup.py
 ```
 
 The universal installer automatically:
@@ -317,8 +325,14 @@ sanhum/
 ├── include/               # Header files
 ├── launch/               # ROS2 launch files
 ├── config/               # Configuration files
+├── docs/                 # Documentation
+│   ├── SECURITY.md       # Security policies
+│   └── hardware_config.json
 ├── CMakeLists.txt        # Build configuration
-└── package.xml          # ROS2 package manifest
+├── package.xml          # ROS2 package manifest
+├── setup.py             # Universal installer
+├── LICENSE              # MIT License
+└── README.md            # This file
 ```
 
 ### Building for Different Platforms

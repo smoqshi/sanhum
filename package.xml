@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>sanhum</name>
-  <version>0.0.1</version>
-  <description>Qt-based ROS2 Jazzy GUI for Sanhum robot</description>
+  <version>1.0.0</version>
+  <description>Sanhum Robot System - ROS2 robot control with Windows GUI and Raspberry Pi robot node</description>
 
-  <maintainer email="you@example.com">Your Name</maintainer>
+  <maintainer email="maintainer@sanhum-robot.org">Sanhum Robot Team</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

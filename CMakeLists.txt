@@ -1,8 +1,21 @@
 cmake_minimum_required(VERSION 3.16)
-project(sanhum LANGUAGES CXX)
+project(sanhum
+    VERSION 1.0.0
+    DESCRIPTION "Sanhum Robot System - ROS2 robot control with GUI"
+    LANGUAGES CXX
+)
 
-set(CMAKE_CXX_STANDARD 17)
+# C++ Standard
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Compiler warnings
+if(MSVC)
+    add_compile_options(/W4)
+else()
+    add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
 # Common ROS2 packages
 find_package(ament_cmake REQUIRED)
@@ -176,6 +189,12 @@ endif()
 install(
     DIRECTORY launch config
     DESTINATION share/${PROJECT_NAME}
+)
+
+# Install headers
+install(
+    DIRECTORY include/
+    DESTINATION include/${PROJECT_NAME}
 )
 
 ament_package()
