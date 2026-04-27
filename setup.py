@@ -467,7 +467,15 @@ class UniversalInstaller:
         self.color_print("Integrating vcpkg with Visual Studio...", 'blue')
         success, _, _ = self.run_command("C:/vcpkg/vcpkg.exe integrate install")
         if success:
-            self.color_print("✓ vcpkg integrated with Visual Studio", 'green')
+            self.color_print("✓ vcpkg installed successfully", 'green')
+
+        # Install colcon (ROS2 build tool)
+        self.color_print("Installing colcon (ROS2 build tool)...", 'blue')
+        success, _, _ = self.run_command("pip install colcon-common-extensions")
+        if not success:
+            self.color_print("Failed to install colcon", 'red')
+            return False
+        self.color_print("✓ colcon installed successfully", 'green')
 
         self.color_print("✓ Windows dependencies installed successfully", 'green')
         self.complete_step("Install dependencies")
