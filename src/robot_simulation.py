@@ -44,6 +44,7 @@ class RobotSimulation:
         self.chassis_height = 0.3
         self.track_width = 0.15
         self.track_height = 0.2
+        self.track_gauge = 0.5  # Distance between track centers
         self.wheel_radius = 0.1
         
         # Manipulator dimensions
