@@ -1,0 +1,56 @@
+# Build directories
+build/
+install/
+log/
+
+# ROS2 workspace
+sanhum_ws/
+ros2_ws/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# vcpkg
+vcpkg/
+vcpkg-installed/
+
+# MinGW
+mingw64/
+mingw32/
+
+# Archives
+*.7z
+*.zip
+*.tar.gz
+
+# Downloaded files
+ros2-jazzy.zip
+mingw64.7z

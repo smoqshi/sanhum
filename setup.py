@@ -591,119 +591,48 @@ class UniversalInstaller:
         print()
 
         if self.platform == 'windows':
-            # Windows build with CMake
-            build_dir = self.project_root / "build"
-            build_dir.mkdir(exist_ok=True)
+            # Windows build with colcon (ROS2 build tool)
+            workspace_dir = Path.home() / "sanhum_ws"
+            workspace_dir.mkdir(exist_ok=True)
+            src_dir = workspace_dir / "src"
+            src_dir.mkdir(exist_ok=True)
 
-            self.color_print("Preparing build directory...", 'blue')
+            self.color_print("Preparing workspace...", 'blue')
 
-            # Check for Visual Studio compiler first
-            has_cl, _, _ = self.run_command('where cl', capture_output=True)
-            has_cl = has_cl and 'cl.exe' in _
+            # Copy project files to workspace (avoid nested workspace issues)
+            import shutil
+            def ignore_nested_workspace(path, names):
+                ignored = set()
+                # Exclude directories that would cause recursion
+                for name in names:
+                    if name in ['ros2_ws', 'sanhum_ws', '__pycache__', '.git', 'build', 'install', 'log']:
+                        ignored.add(name)
+                    elif name.endswith('.pyc'):
+                        ignored.add(name)
+                return list(ignored)
 
-            if has_cl:
-                # Use Visual Studio toolchain
-                cmake_cmd = f'cmake .. -A x64 -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
-                self.color_print("Using Visual Studio compiler...", 'blue')
-            else:
-                # Use MinGW-w64 as alternative
-                mingw_path = Path("C:/mingw64")
-                mingw_gcc = mingw_path / "bin" / "gcc.exe"
-                mingw_gpp = mingw_path / "bin" / "g++.exe"
-                mingw_make = mingw_path / "bin" / "mingw32-make.exe"
+            # Clean up existing corrupted workspace
+            if (src_dir / "sanhum").exists():
+                self.color_print("Cleaning existing workspace...", 'blue')
+                shutil.rmtree(src_dir / "sanhum")
 
-                if not mingw_path.exists() or not mingw_gcc.exists():
-                    self.color_print("Installing MinGW-w64 compiler...", 'blue')
-                    # Download and install MinGW-w64
-                    mingw_url = "https://github.com/niXman/mingw-builds-binaries/releases/download/13.2.0-rt_v11-rev1/x86_64-13.2.0-release-posix-seh-ucrt-rt_v11-rev1.7z"
-                    mingw_archive = "mingw64.7z"
+            self.color_print("Copying project files to workspace...", 'blue')
+            shutil.copytree(self.project_root, src_dir / "sanhum", ignore=ignore_nested_workspace)
+            self.color_print("✓ Project files copied", 'green')
 
-                    if not self.download_file(mingw_url, mingw_archive):
-                        return False
+            # Source ROS2 and build with colcon
+            self.color_print("Building with colcon (ROS2 build tool)...", 'blue')
+            self.color_print("  Sourcing ROS2 environment", 'blue')
 
-                    # Extract MinGW-w64
-                    try:
-                        import py7zr
-                        self.color_print("Extracting MinGW-w64...", 'blue')
-                        with py7zr.SevenZipFile(mingw_archive, mode='r') as z:
-                            z.extractall("C:/")
-
-                        # Clean up
-                        Path(mingw_archive).unlink()
-                        self.color_print("✓ MinGW-w64 installed successfully", 'green')
-                    except ImportError:
-                        # Try to install py7zr automatically
-                        self.color_print("py7zr not available, installing...", 'blue')
-                        success, _, _ = self.run_command("pip install py7zr")
-                        if success:
-                            import py7zr
-                            self.color_print("Extracting MinGW-w64...", 'blue')
-                            with py7zr.SevenZipFile(mingw_archive, mode='r') as z:
-                                z.extractall("C:/")
-
-                            # Clean up
-                            Path(mingw_archive).unlink()
-                            self.color_print("✓ MinGW-w64 installed successfully", 'green')
-                        else:
-                            # Try using 7-Zip if available
-                            self.color_print("Trying to use 7-Zip...", 'blue')
-                            seven_zip_paths = [
-                                "C:/Program Files/7-Zip/7z.exe",
-                                "C:/Program Files (x86)/7-Zip/7z.exe"
-                            ]
-                            seven_zip = None
-                            for path in seven_zip_paths:
-                                if Path(path).exists():
-                                    seven_zip = path
-                                    break
-
-                            if seven_zip:
-                                success, _, _ = self.run_command(f'"{seven_zip}" x {mingw_archive} -oC:/')
-                                if success:
-                                    Path(mingw_archive).unlink()
-                                    self.color_print("✓ MinGW-w64 installed successfully using 7-Zip", 'green')
-                                else:
-                                    self.color_print("Failed to extract with 7-Zip", 'red')
-                                    return False
-                            else:
-                                self.color_print("✗ Neither py7zr nor 7-Zip available", 'red')
-                                self.color_print("Please install MinGW-w64 manually from https://www.mingw-w64.org/", 'yellow')
-                                return False
-
-                # Verify MinGW installation
-                if not mingw_gcc.exists():
-                    self.color_print(f"✗ MinGW compiler not found at {mingw_gcc}", 'red')
-                    self.color_print("Please install MinGW-w64 manually", 'yellow')
-                    return False
-
-                # Use MinGW toolchain
-                cmake_cmd = f'cmake .. -G "MinGW Makefiles" -DCMAKE_C_COMPILER={mingw_gcc} -DCMAKE_CXX_COMPILER={mingw_gpp} -DCMAKE_MAKE_PROGRAM={mingw_make} -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
-                self.color_print("Using MinGW-w64 compiler...", 'blue')
-
-            # Configure CMake
-            self.color_print("Configuring CMake...", 'blue')
-            # Add MinGW to PATH for CMake to find make
-            import os
-            old_path = os.environ.get('PATH', '')
-            os.environ['PATH'] = 'C:/mingw64/bin;' + old_path
-            success, stdout, stderr = self.run_command(cmake_cmd, cwd=str(build_dir))
-            os.environ['PATH'] = old_path  # Restore PATH
-            if not success:
-                self.color_print("✗ CMake configuration failed", 'red')
-                self.color_print(f"Error: {stderr}", 'red')
-                self.color_print(f"Build directory: {build_dir}", 'yellow')
-                self.color_print(f"Project root: {self.project_root}", 'yellow')
+            # Source ROS2 and build
+            ros2_setup = Path("C:/dev/ros2/jazzy/setup.bat")
+            if not ros2_setup.exists():
+                self.color_print(f"✗ ROS2 not found at {ros2_setup}", 'red')
                 return False
-            self.color_print("✓ CMake configuration successful", 'green')
 
-            # Build
-            self.color_print("Compiling project...", 'blue')
-            if has_cl:
-                build_cmd = "cmake --build . --config Release"
-            else:
-                build_cmd = "cmake --build . --config Release -- -j4"
-
-            success, stdout, stderr = self.run_command(build_cmd, cwd=build_dir)
+            # Build command with ROS2 environment sourced
+            build_cmd = f'call "{ros2_setup}" && colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release'
+            success, stdout, stderr = self.run_command(build_cmd, cwd=str(workspace_dir))
             if not success:
                 self.color_print("✗ Build failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
