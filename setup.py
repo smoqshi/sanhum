@@ -43,7 +43,7 @@ class UniversalInstaller:
     def __init__(self):
         self.platform = platform.system().lower()
         self.script_dir = Path(__file__).parent
-        self.project_root = self.script_dir.parent
+        self.project_root = self.script_dir
 
         # Colors for output
         self.colors = {
@@ -445,7 +445,12 @@ class UniversalInstaller:
         progress = ProgressBar(len(packages), prefix='Progress', suffix='Complete')
         for i, package in enumerate(packages, 1):
             self.color_print(f"  Installing {package}...", 'blue')
-            success, stdout, stderr = self.run_command(f"C:/vcpkg/vcpkg.exe install {package}")
+            if 'qt5' in package.lower():
+                self.color_print("  NOTE: Qt5 can take 30-60 minutes to build from source", 'yellow')
+                self.color_print("  Using binary cache if available to speed up installation", 'yellow')
+                self.color_print("  This is normal - please be patient", 'yellow')
+            # Use binary cache and aria2 for faster installation
+            success, stdout, stderr = self.run_command(f"C:/vcpkg/vcpkg.exe install {package} --binarysource=default")
             if not success:
                 if "vcpkg-running.lock" in stderr:
                     self.color_print("  vcpkg is busy. Please wait and try again.", 'yellow')
@@ -632,10 +637,12 @@ class UniversalInstaller:
 
             # Configure CMake
             self.color_print("Configuring CMake...", 'blue')
-            success, stdout, stderr = self.run_command(cmake_cmd, cwd=build_dir)
+            success, stdout, stderr = self.run_command(cmake_cmd, cwd=str(build_dir))
             if not success:
                 self.color_print("✗ CMake configuration failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
+                self.color_print(f"Build directory: {build_dir}", 'yellow')
+                self.color_print(f"Project root: {self.project_root}", 'yellow')
                 return False
             self.color_print("✓ CMake configuration successful", 'green')
 
