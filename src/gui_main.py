@@ -16,6 +16,27 @@ import math
 from datetime import datetime
 from collections import defaultdict
 
+# Fallback class for RobotInterfaceManager (used when ROS2 is not available)
+class RobotInterfaceManager:
+    """Fallback ROS2 interface manager for Windows/WiFi control"""
+    def __init__(self, *args, **kwargs):
+        self.gui_callback = kwargs.get('gui_callback', None)
+        self.running = False
+
+    def start_ros(self):
+        """Start ROS2 interface (no-op for WiFi mode)"""
+        self.running = True
+        print("ROS2 interface started in WiFi mode")
+
+    def stop_ros(self):
+        """Stop ROS2 interface"""
+        self.running = False
+        print("ROS2 interface stopped")
+
+    def get_interface(self):
+        """Get the robot interface"""
+        return None
+
 # Import our robot modules
 try:
     from hardware_integration import HardwareManager, RobotMode
@@ -36,16 +57,7 @@ except ImportError as e:
     ROS2_AVAILABLE = False
     GPIO_AVAILABLE = False
     ALL_MODULES_AVAILABLE = False
-    
-    # Create fallback imports
-    class RobotInterfaceManager:
-        def __init__(self, *args, **kwargs): pass
-        def start_ros(self): pass
-        def stop_ros(self): pass
-        def get_interface(self): return None
-    
-    class RobotMode: pass
-    
+
     class InputController:
         def __init__(self, *args, **kwargs): pass
         def start(self): pass
