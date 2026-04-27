@@ -670,8 +670,13 @@ class UniversalInstaller:
                 self.color_print("  Please install colcon manually", 'yellow')
                 return False
 
-            # Build command with ROS2 environment sourced
-            build_cmd = f'call "{ros2_setup}" && colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release'
+            # Set environment variables for MinGW to avoid Visual Studio requirement
+            self.color_print("Configuring for MinGW build...", 'blue')
+            os.environ['CC'] = 'gcc'
+            os.environ['CXX'] = 'g++'
+
+            # Build command with ROS2 environment sourced and MinGW configuration
+            build_cmd = f'call "{ros2_setup}" && set CC=gcc && set CXX=g++ && colcon build --parallel-workers 8 --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -G "MinGW Makefiles"'
             success, stdout, stderr = self.run_command(build_cmd, cwd=str(workspace_dir))
             os.environ['PATH'] = old_path  # Restore PATH
             if not success:
