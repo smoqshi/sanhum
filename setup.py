@@ -632,12 +632,17 @@ class UniversalInstaller:
                         self.color_print("Please install MinGW-w64 manually from https://www.mingw-w64.org/", 'yellow')
 
                 # Use MinGW toolchain
-                cmake_cmd = f'cmake .. -G "MinGW Makefiles" -DCMAKE_C_COMPILER=C:/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/mingw64/bin/g++.exe -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
+                cmake_cmd = f'cmake .. -G "MinGW Makefiles" -DCMAKE_C_COMPILER=C:/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/mingw64/bin/g++.exe -DCMAKE_MAKE_PROGRAM=C:/mingw64/bin/mingw32-make.exe -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"'
                 self.color_print("Using MinGW-w64 compiler...", 'blue')
 
             # Configure CMake
             self.color_print("Configuring CMake...", 'blue')
+            # Add MinGW to PATH for CMake to find make
+            import os
+            old_path = os.environ.get('PATH', '')
+            os.environ['PATH'] = 'C:/mingw64/bin;' + old_path
             success, stdout, stderr = self.run_command(cmake_cmd, cwd=str(build_dir))
+            os.environ['PATH'] = old_path  # Restore PATH
             if not success:
                 self.color_print("✗ CMake configuration failed", 'red')
                 self.color_print(f"Error: {stderr}", 'red')
