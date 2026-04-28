@@ -9,8 +9,10 @@ ros2_ws/
 
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
+*.pyc
 *.so
 .Python
 
