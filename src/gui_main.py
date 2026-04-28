@@ -435,21 +435,21 @@ class FullyIntegratedRobotGUI:
         self.mono_font = ("Consolas", 9)
         self.root.option_add("*Font", self.default_font)
         
-        # Modern dark theme color scheme
+        # Soft gray modern theme color scheme
         self.colors = {
-            'bg': '#1a1a2e',           # Deep blue-black
-            'panel_bg': '#16213e',     # Dark blue panel
-            'accent': '#0f3460',       # Accent blue
-            'accent_light': '#e94560', # Pink/red accent
-            'success': '#00d4aa',     # Modern green
-            'warning': '#ffd93d',      # Warm yellow
+            'bg': '#f5f5f7',           # Soft light gray background
+            'panel_bg': '#ffffff',     # White panels
+            'accent': '#5c7cfa',       # Soft blue accent
+            'accent_light': '#ff6b6b', # Soft red accent
+            'success': '#51cf66',     # Soft green
+            'warning': '#fcc419',      # Soft yellow
             'danger': '#ff6b6b',       # Soft red
-            'info': '#4ecdc4',        # Teal
-            'text': '#eaeaea',         # Off-white
-            'text_secondary': '#a0a0a0', # Light gray
-            'grid': '#2a2a4e',         # Subtle grid
-            'border': '#0f3460',       # Border color
-            'highlight': '#e94560'     # Highlight color
+            'info': '#22b8cf',        # Soft cyan
+            'text': '#343a40',         # Dark gray text
+            'text_secondary': '#868e96', # Medium gray text
+            'grid': '#e9ecef',         # Light gray grid
+            'border': '#dee2e6',       # Border color
+            'highlight': '#748ffc'     # Highlight color
         }
         
         self.root.configure(bg=self.colors['bg'])
@@ -1054,7 +1054,7 @@ class FullyIntegratedRobotGUI:
         Label(viz_frame, text="3D ROBOT MODEL", bg=self.colors['panel_bg'],
                fg=self.colors['accent_light'], font=self.default_font).pack(anchor=tk.W)
 
-        self.robot_3d_canvas = Canvas(viz_frame, bg=self.colors['bg'], width=400, height=250,
+        self.robot_3d_canvas = Canvas(viz_frame, bg=self.colors['grid'], width=400, height=250,
                                       highlightthickness=0)
         self.robot_3d_canvas.pack(fill=tk.BOTH, expand=True, pady=5)
 
@@ -1147,7 +1147,7 @@ class FullyIntegratedRobotGUI:
                    fg=self.colors['accent_light'], font=self.default_font).pack(pady=5)
             
             # Camera canvas (real video feed)
-            canvas = Canvas(cam_frame, bg='#000000', width=320, height=180)
+            canvas = Canvas(cam_frame, bg=self.colors['grid'], width=320, height=180)
             canvas.pack(padx=5, pady=5)
             
             self.camera_canvases[camera_name.lower().replace(' ', '_')] = canvas

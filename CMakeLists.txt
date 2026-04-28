@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(sanhum
     VERSION 1.0.0
-    DESCRIPTION "Sanhum Robot System - ROS2 robot control with GUI"
+    DESCRIPTION "Sanhum Robot System - ROS2 robot control with Python GUI"
     LANGUAGES CXX
 )
 
@@ -25,117 +25,16 @@ find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 
 if(WIN32)
-    # --- Windows GUI Build ---
-    message(STATUS "Configuring for Windows GUI - High Performance C++")
-
-    find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
-    set(CMAKE_AUTOMOC ON)
-    set(CMAKE_AUTORCC ON)
-    set(CMAKE_AUTOUIC ON)
-
-    find_package(nav_msgs REQUIRED)
-    find_package(vision_msgs REQUIRED)
-    find_package(cv_bridge REQUIRED)
-    find_package(OpenCV REQUIRED core imgproc)
-
-    # High Performance C++ GUI Application
-    add_executable(sanhum_robot_gui_cpp
-        src/sanhum_robot_gui.cpp
-        src/motor_driver.cpp
-        src/esp32_driver.cpp
-        src/arduino_sensors.cpp
-        src/cameras.cpp
-        src/gamepad_control.cpp
-        src/wifi_server.cpp
-        src/yolo_detector.cpp
-    )
-
-    target_compile_definitions(sanhum_robot_gui_cpp PRIVATE PLATFORM_WINDOWS HIGH_PERFORMANCE)
-
-    target_include_directories(sanhum_robot_gui_cpp PRIVATE
-        include
-        ${OpenCV_INCLUDE_DIRS}
-    )
-
-    target_link_libraries(sanhum_robot_gui_cpp PRIVATE
-        Qt6::Core
-        Qt6::Gui
-        Qt6::Widgets
-        Qt6::Network
-        ${OpenCV_LIBS}
-    )
-
-    ament_target_dependencies(sanhum_robot_gui_cpp
-        rclcpp
-        geometry_msgs
-        nav_msgs
-        sensor_msgs
-        std_msgs
-        vision_msgs
-        cv_bridge
-    )
-
-    install(TARGETS sanhum_robot_gui_cpp DESTINATION lib/${PROJECT_NAME})
+    # Windows: Skip C++ build, use Python GUI only
+    message(STATUS "Windows detected - Using Python GUI, skipping C++ build")
 
 else()
     # --- Linux/PI Robot Build ---
-    message(STATUS "Configuring for Linux Robot - High Performance C++")
+    message(STATUS "Configuring for Linux Robot - Robot Node Only")
 
-    # Find Qt5
-    find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
+    # Find Qt5 for serial port (robot node only)
+    find_package(Qt5 REQUIRED COMPONENTS Core SerialPort)
     set(CMAKE_AUTOMOC ON)
-    set(CMAKE_AUTORCC ON)
-    set(CMAKE_AUTOUIC ON)
-
-    # Find OpenCV
-    find_package(OpenCV REQUIRED)
-
-    # Find additional ROS2 packages
-    find_package(nav_msgs REQUIRED)
-    find_package(vision_msgs REQUIRED)
-    find_package(cv_bridge REQUIRED)
-
-    # High Performance C++ GUI Application (Linux - no gamepad_control)
-    add_executable(sanhum_robot_gui_cpp
-        src/sanhum_robot_gui.cpp
-        src/motor_driver.cpp
-        src/esp32_driver.cpp
-        src/arduino_sensors.cpp
-        src/cameras.cpp
-        src/wifi_server.cpp
-        src/yolo_detector.cpp
-        include/esp32_driver.h
-        include/arduino_sensors.h
-        include/wifi_server.h
-    )
-
-    target_compile_definitions(sanhum_robot_gui_cpp PRIVATE PLATFORM_LINUX HIGH_PERFORMANCE)
-
-    target_include_directories(sanhum_robot_gui_cpp PRIVATE
-        include
-        ${OpenCV_INCLUDE_DIRS}
-    )
-
-    target_link_libraries(sanhum_robot_gui_cpp
-        Qt5::Core
-        Qt5::Gui
-        Qt5::Widgets
-        Qt5::Network
-        Qt5::SerialPort
-        ${OpenCV_LIBS}
-    )
-
-    ament_target_dependencies(sanhum_robot_gui_cpp
-        rclcpp
-        geometry_msgs
-        nav_msgs
-        sensor_msgs
-        std_msgs
-        vision_msgs
-        cv_bridge
-    )
-
-    install(TARGETS sanhum_robot_gui_cpp DESTINATION lib/${PROJECT_NAME})
 
     # Robot node
     add_executable(sanhum_robot

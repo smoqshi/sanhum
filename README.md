@@ -315,27 +315,25 @@ top   # Windows (WSL)
 ```
 sanhum/
 ├── src/                    # Source code
-│   ├── gui_main.py        # Python GUI (Tkinter)
+│   ├── gui_main.py        # Python GUI (Tkinter) - Main control interface
 │   ├── robot_main.cpp     # Raspberry Pi robot entry point
-│   ├── sanhum_robot_gui.cpp # C++ Qt GUI
 │   ├── motor_driver.cpp   # Motor control implementation
 │   ├── esp32_driver.cpp   # Manipulator serial driver
 │   ├── arduino_sensors.cpp # Sensor array driver
-│   ├── cameras.cpp        # Camera interface
-│   ├── wifi_server.cpp    # WiFi communication
-│   ├── yolo_detector.cpp  # YOLO object detection
-│   ├── gamepad_control.cpp # Gamepad input
 │   ├── hardware_integration.py # Hardware manager
 │   ├── robot_simulation.py # Robot simulation
-│   └── ...               # Other Python modules
+│   ├── camera_interface.py # Camera interface
+│   ├── esp32_interface.py # ESP32 interface
+│   ├── arduino_interface.py # Arduino interface
+│   ├── gpio_interface.py # GPIO interface
+│   ├── input_controller.py # Input controller
+│   ├── robot_interface.py # Robot interface
+│   ├── serial_interfaces.py # Serial interfaces
+│   └── rpi_gpio_interface.py # Raspberry Pi GPIO interface
 ├── include/               # C++ Header files
 │   ├── motor_driver.h
 │   ├── esp32_driver.h
 │   ├── arduino_sensors.h
-│   ├── cameras.h
-│   ├── wifi_server.h
-│   ├── yolo_detector.h
-│   ├── gamepad_control.h
 │   └── communication_protocols.h
 ├── launch/               # ROS2 launch files
 │   ├── main.launch.py

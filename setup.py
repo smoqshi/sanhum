@@ -165,10 +165,9 @@ class UniversalInstaller:
             system_tools = {
                 'git': 'Version control',
                 'cmake': 'Build system',
-                'cl': 'Visual Studio compiler',
-                'vcpkg': 'Package manager'
+                'cl': 'Visual Studio compiler'
             }
-            
+
             for tool, description in system_tools.items():
                 if tool == 'cl':
                     # Check for Visual Studio compiler
@@ -177,15 +176,7 @@ class UniversalInstaller:
                         self.color_print(f"  ✓ {tool} ({description})", 'green')
                     else:
                         self.color_print(f"  ⚠ {tool} ({description}) - Visual Studio not found", 'yellow')
-                        self.color_print("    Note: Will install with MinGW-w64 as alternative", 'blue')
-                        self.color_print("    Or install Visual Studio 2019+ with C++ tools", 'blue')
-                        # Don't fail for missing cl - we can use alternative compiler
-                elif tool == 'vcpkg':
-                    vcpkg_path = Path("C:/vcpkg/vcpkg.exe")
-                    if vcpkg_path.exists():
-                        self.color_print(f"  ✓ {tool} ({description})", 'green')
-                    else:
-                        self.color_print(f"  ⚠ {tool} ({description}) - Will be installed", 'yellow')
+                        self.color_print("    Note: Python GUI does not require Visual Studio", 'blue')
                 else:
                     success, _, _ = self.run_command(f'where {tool}', capture_output=True)
                     if success:
@@ -394,80 +385,20 @@ class UniversalInstaller:
             return False
             
     def install_windows_dependencies(self):
-        """Install Windows dependencies (vcpkg, Qt, OpenCV)"""
+        """Install Windows dependencies (Python GUI only)"""
         self.color_print("[Step 3/5] Installing Windows dependencies...", 'blue')
-        self.color_print("This may take 10-20 minutes depending on your system", 'yellow')
+        self.color_print("Installing Python GUI dependencies...", 'blue')
         print()
 
-        # Install vcpkg
-        vcpkg_dir = Path("C:/vcpkg")
-        if not vcpkg_dir.exists():
-            self.color_print("Installing vcpkg package manager...", 'blue')
-            success, _, _ = self.run_command("git clone https://github.com/Microsoft/vcpkg.git C:/vcpkg")
+        # Install Python GUI dependencies
+        python_deps = ["pyserial", "opencv-python", "pillow"]
+        for dep in python_deps:
+            self.color_print(f"  Installing {dep}...", 'blue')
+            success, _, _ = self.run_command(f"pip install --user --no-cache-dir {dep}")
             if not success:
-                self.color_print("Failed to clone vcpkg", 'red')
-                return False
-
-            # Bootstrap vcpkg
-            self.color_print("Bootstrapping vcpkg...", 'blue')
-            success, _, _ = self.run_command("cd C:/vcpkg && bootstrap-vcpkg.bat")
-            if not success:
-                self.color_print("Failed to bootstrap vcpkg", 'red')
-                return False
-            self.color_print("✓ vcpkg installed successfully", 'green')
-        else:
-            self.color_print("✓ vcpkg already installed", 'green')
-
-        # Clean up any existing vcpkg locks
-        self.color_print("Cleaning up vcpkg locks...", 'blue')
-        lock_files = [
-            "C:/vcpkg/installed/vcpkg/vcpkg-running.lock",
-            "C:/vcpkg/buildtrees/vcpkg-running.lock"
-        ]
-
-        for lock_file in lock_files:
-            lock_path = Path(lock_file)
-            if lock_path.exists():
-                try:
-                    lock_path.unlink()
-                    self.color_print(f"  Removed lock: {lock_file}", 'yellow')
-                except Exception as e:
-                    self.color_print(f"  Could not remove lock {lock_file}: {e}", 'yellow')
-
-        # Install packages with vcpkg
-        packages = [
-            "opencv4[core,contrib]:x64-windows",
-            "qt5-base:x64-windows",
-            "qt5-serialport:x64-windows"
-        ]
-
-        self.color_print("Installing packages via vcpkg...", 'blue')
-        progress = ProgressBar(len(packages), prefix='Progress', suffix='Complete')
-        for i, package in enumerate(packages, 1):
-            self.color_print(f"  Installing {package}...", 'blue')
-            if 'qt5' in package.lower():
-                self.color_print("  NOTE: Qt5 can take 30-60 minutes to build from source", 'yellow')
-                self.color_print("  Using binary cache if available to speed up installation", 'yellow')
-                self.color_print("  This is normal - please be patient", 'yellow')
-            # Use binary cache and aria2 for faster installation
-            success, stdout, stderr = self.run_command(f"C:/vcpkg/vcpkg.exe install {package} --binarysource=default")
-            if not success:
-                if "vcpkg-running.lock" in stderr:
-                    self.color_print("  vcpkg is busy. Please wait and try again.", 'yellow')
-                    self.color_print("  Or close any other vcpkg processes.", 'yellow')
-                    return False
-                else:
-                    self.color_print(f"  Failed to install {package}", 'red')
-                    self.color_print(f"  Error: {stderr}", 'red')
-                    return False
-            progress.increment()
-            self.color_print(f"  ✓ {package} installed", 'green')
-
-        # Integrate with Visual Studio
-        self.color_print("Integrating vcpkg with Visual Studio...", 'blue')
-        success, _, _ = self.run_command("C:/vcpkg/vcpkg.exe integrate install")
-        if success:
-            self.color_print("✓ vcpkg installed successfully", 'green')
+                self.color_print(f"  Failed to install {dep}", 'yellow')
+            else:
+                self.color_print(f"  ✓ {dep} installed", 'green')
 
         # Install colcon (ROS2 build tool)
         self.color_print("Installing colcon (ROS2 build tool)...", 'blue')
@@ -564,9 +495,7 @@ class UniversalInstaller:
             "python3-colcon-common-extensions",
             "qtbase5-dev",
             "libqt5serialport5-dev",
-            "libopencv-dev",
             "ros-jazzy-nav-msgs",
-            "ros-jazzy-vision-msgs",
             "ros-jazzy-sensor-msgs",
             "ros-jazzy-geometry-msgs",
             "python3-pigpio"
@@ -729,7 +658,7 @@ class UniversalInstaller:
 
             # Install Python GUI dependencies
             self.color_print("Installing Python GUI dependencies...", 'blue')
-            python_deps = ["PyQt5", "pyserial", "opencv-python"]
+            python_deps = ["pyserial", "opencv-python", "pillow"]
             for dep in python_deps:
                 self.color_print(f"  Installing {dep}...", 'blue')
                 success, _, _ = self.run_command(f"pip install --user --no-cache-dir {dep}")
