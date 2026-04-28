@@ -315,19 +315,35 @@ top   # Windows (WSL)
 ```
 sanhum/
 ├── src/                    # Source code
-│   ├── gui_main.cpp       # Windows GUI entry point
+│   ├── gui_main.py        # Python GUI (Tkinter)
 │   ├── robot_main.cpp     # Raspberry Pi robot entry point
-│   ├── main_window.cpp    # Main GUI window
+│   ├── sanhum_robot_gui.cpp # C++ Qt GUI
 │   ├── motor_driver.cpp   # Motor control implementation
 │   ├── esp32_driver.cpp   # Manipulator serial driver
 │   ├── arduino_sensors.cpp # Sensor array driver
-│   └── ...
-├── include/               # Header files
+│   ├── cameras.cpp        # Camera interface
+│   ├── wifi_server.cpp    # WiFi communication
+│   ├── yolo_detector.cpp  # YOLO object detection
+│   ├── gamepad_control.cpp # Gamepad input
+│   ├── hardware_integration.py # Hardware manager
+│   ├── robot_simulation.py # Robot simulation
+│   └── ...               # Other Python modules
+├── include/               # C++ Header files
+│   ├── motor_driver.h
+│   ├── esp32_driver.h
+│   ├── arduino_sensors.h
+│   ├── cameras.h
+│   ├── wifi_server.h
+│   ├── yolo_detector.h
+│   ├── gamepad_control.h
+│   └── communication_protocols.h
 ├── launch/               # ROS2 launch files
+│   ├── main.launch.py
+│   └── raspberry_pi.launch.py
 ├── config/               # Configuration files
+│   └── raspberry_pi_config.yaml
 ├── docs/                 # Documentation
-│   ├── SECURITY.md       # Security policies
-│   └── hardware_config.json
+│   └── SECURITY.md       # Security policies
 ├── CMakeLists.txt        # Build configuration
 ├── package.xml          # ROS2 package manifest
 ├── setup.py             # Universal installer

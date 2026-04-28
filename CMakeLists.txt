@@ -77,24 +77,6 @@ if(WIN32)
 
     install(TARGETS sanhum_robot_gui_cpp DESTINATION lib/${PROJECT_NAME})
 
-    # Legacy Python GUI (for comparison)
-    add_executable(sanhum_gui
-        src/gui_main.cpp
-        src/main_window.cpp
-        src/joystick_widget.cpp
-        src/robot_view_widget.cpp
-    )
-
-    target_compile_definitions(sanhum_gui PRIVATE PLATFORM_WINDOWS LEGACY_GUI)
-
-    ament_target_dependencies(sanhum_gui
-        rclcpp
-        geometry_msgs
-        nav_msgs
-        sensor_msgs
-        std_msgs
-    )
-
 else()
     # --- Linux/PI Robot Build ---
     message(STATUS "Configuring for Linux Robot - High Performance C++")
