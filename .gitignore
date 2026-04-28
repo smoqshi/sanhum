@@ -23,6 +23,25 @@ cmake_install.cmake
 Makefile
 *.cmake
 !CMakeLists.txt
+compile_commands.json
+
+# C++ build artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.dylib
+*.exe
+*.out
+*.app
+
+# Qt/MOC
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.autosave
 
 # IDE
 .vscode/
@@ -30,15 +49,18 @@ Makefile
 *.swp
 *.swo
 *~
+*.sublime-*
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Temporary files
 *.tmp
 *.bak
 *.log
+*.cache
 
 # vcpkg
 vcpkg/
@@ -52,6 +74,8 @@ mingw32/
 *.7z
 *.zip
 *.tar.gz
+*.tar.bz2
+*.rar
 
 # Downloaded files
 ros2-jazzy.zip
