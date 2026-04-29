@@ -435,21 +435,26 @@ class FullyIntegratedRobotGUI:
         self.mono_font = ("Consolas", 9)
         self.root.option_add("*Font", self.default_font)
         
-        # Soft gray modern theme color scheme
+        # Soft light modern theme color scheme
         self.colors = {
-            'bg': '#f5f5f7',           # Soft light gray background
+            'bg': '#fafbfc',           # Very light gray background
             'panel_bg': '#ffffff',     # White panels
-            'accent': '#5c7cfa',       # Soft blue accent
-            'accent_light': '#ff6b6b', # Soft red accent
-            'success': '#51cf66',     # Soft green
-            'warning': '#fcc419',      # Soft yellow
-            'danger': '#ff6b6b',       # Soft red
-            'info': '#22b8cf',        # Soft cyan
-            'text': '#343a40',         # Dark gray text
-            'text_secondary': '#868e96', # Medium gray text
-            'grid': '#e9ecef',         # Light gray grid
-            'border': '#dee2e6',       # Border color
-            'highlight': '#748ffc'     # Highlight color
+            'accent': '#e3f2fd',       # Soft blue accent
+            'accent_dark': '#1976d2',  # Darker blue for text
+            'accent_light': '#ffcdd2', # Soft red accent
+            'success': '#c8e6c9',     # Soft green
+            'success_dark': '#388e3c', # Darker green for text
+            'warning': '#fff9c4',      # Soft yellow
+            'warning_dark': '#f9a825', # Darker yellow for text
+            'danger': '#ffcdd2',       # Soft red
+            'danger_dark': '#d32f2f',  # Darker red for text
+            'info': '#b2ebf2',        # Soft cyan
+            'info_dark': '#0097a7',   # Darker cyan for text
+            'text': '#37474f',         # Dark gray text
+            'text_secondary': '#78909c', # Medium gray text
+            'grid': '#eceff1',         # Light gray grid
+            'border': '#cfd8dc',       # Border color
+            'highlight': '#bbdefb'     # Highlight color
         }
         
         self.root.configure(bg=self.colors['bg'])
@@ -984,22 +989,22 @@ class FullyIntegratedRobotGUI:
 
         # Connection status
         self.connection_indicator = Label(
-            status_frame, text="SIMULATION MODE", bg=self.colors['accent_light'],
-            fg=self.colors['text'], font=self.header_font, width=18, relief=tk.FLAT
+            status_frame, text="SIMULATION MODE", bg=self.colors['accent'],
+            fg=self.colors['accent_dark'], font=self.header_font, width=18, relief=tk.FLAT
         )
         self.connection_indicator.pack(side=tk.LEFT, padx=8, pady=8)
 
         # Hardware status
         self.hardware_status_label = Label(
             status_frame, text="HW: SIM", bg=self.colors['panel_bg'],
-            fg=self.colors['warning'], font=self.default_font
+            fg=self.colors['warning_dark'], font=self.default_font
         )
         self.hardware_status_label.pack(side=tk.LEFT, padx=15)
 
         # Control status
         self.control_status_label = Label(
             status_frame, text="CONTROL: KEYBOARD", bg=self.colors['panel_bg'],
-            fg=self.colors['success'], font=self.default_font
+            fg=self.colors['success_dark'], font=self.default_font
         )
         self.control_status_label.pack(side=tk.LEFT, padx=15)
 
@@ -1013,14 +1018,14 @@ class FullyIntegratedRobotGUI:
         # Emergency stop indicator
         self.emergency_indicator = Label(
             status_frame, text="EMERGENCY STOP: OFF", bg=self.colors['success'],
-            fg=self.colors['bg'], font=self.default_font, width=22, relief=tk.FLAT
+            fg=self.colors['success_dark'], font=self.default_font, width=22, relief=tk.FLAT
         )
         self.emergency_indicator.pack(side=tk.LEFT, padx=15)
 
         # Battery indicator
         self.battery_label = Label(
             status_frame, text="BATTERY: 100%", bg=self.colors['panel_bg'],
-            fg=self.colors['info'], font=self.default_font
+            fg=self.colors['info_dark'], font=self.default_font
         )
         self.battery_label.pack(side=tk.LEFT, padx=15)
 
@@ -1041,7 +1046,7 @@ class FullyIntegratedRobotGUI:
         header.pack_propagate(False)
 
         Label(header, text="TELEMETRY & 3D VIEW", bg=self.colors['accent'],
-               fg=self.colors['text'], font=self.header_font).pack(pady=8)
+               fg=self.colors['accent_dark'], font=self.header_font).pack(pady=8)
 
         # Content container
         content_frame = Frame(parent, bg=self.colors['panel_bg'])
@@ -1052,7 +1057,7 @@ class FullyIntegratedRobotGUI:
         viz_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         Label(viz_frame, text="3D ROBOT MODEL", bg=self.colors['panel_bg'],
-               fg=self.colors['accent_light'], font=self.default_font).pack(anchor=tk.W)
+               fg=self.colors['accent_dark'], font=self.default_font).pack(anchor=tk.W)
 
         self.robot_3d_canvas = Canvas(viz_frame, bg=self.colors['grid'], width=400, height=250,
                                       highlightthickness=0)
@@ -1063,49 +1068,49 @@ class FullyIntegratedRobotGUI:
         telemetry_frame.pack(fill=tk.BOTH, expand=True)
 
         Label(telemetry_frame, text="TELEMETRY DATA", bg=self.colors['panel_bg'],
-               fg=self.colors['accent_light'], font=self.default_font).pack(anchor=tk.W)
+               fg=self.colors['accent_dark'], font=self.default_font).pack(anchor=tk.W)
 
         # Position display
-        pos_frame = Frame(telemetry_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        pos_frame = Frame(telemetry_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         pos_frame.pack(fill=tk.X, pady=2)
 
         self.position_display = Label(pos_frame, text="X: 0.00m  Y: 0.00m  THETA: 0.00°",
-                                     bg=self.colors['bg'], fg=self.colors['text'],
+                                     bg=self.colors['grid'], fg=self.colors['text'],
                                      font=self.mono_font)
         self.position_display.pack(anchor=tk.W, padx=10, pady=5)
 
         # Velocity display
-        vel_frame = Frame(telemetry_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        vel_frame = Frame(telemetry_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         vel_frame.pack(fill=tk.X, pady=2)
 
         self.velocity_display = Label(vel_frame, text="Linear: 0.00m/s  Angular: 0.00rad/s",
-                                     bg=self.colors['bg'], fg=self.colors['text'],
+                                     bg=self.colors['grid'], fg=self.colors['text'],
                                      font=self.mono_font)
         self.velocity_display.pack(anchor=tk.W, padx=10, pady=5)
 
         # Motor status
-        motor_frame = Frame(telemetry_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        motor_frame = Frame(telemetry_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         motor_frame.pack(fill=tk.X, pady=2)
 
         self.motor_display = Label(motor_frame, text="Left: 0.00%  Right: 0.00%",
-                                   bg=self.colors['bg'], fg=self.colors['text'],
+                                   bg=self.colors['grid'], fg=self.colors['text'],
                                    font=self.mono_font)
         self.motor_display.pack(anchor=tk.W, padx=10, pady=5)
 
         # Sensor readings
-        sensor_frame = Frame(telemetry_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        sensor_frame = Frame(telemetry_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         sensor_frame.pack(fill=tk.X, pady=2)
 
         self.sensor_display = Label(sensor_frame, text="US-F: 0.00m  US-R: 0.00m  IR-L: 0.00m  IR-R: 0.00m",
-                                   bg=self.colors['bg'], fg=self.colors['text'],
+                                   bg=self.colors['grid'], fg=self.colors['text'],
                                    font=self.mono_font)
         self.sensor_display.pack(anchor=tk.W, padx=10, pady=5)
 
         # System log (small)
-        log_frame = Frame(telemetry_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        log_frame = Frame(telemetry_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
 
-        self.system_log = Text(log_frame, height=4, bg=self.colors['bg'], fg=self.colors['success'],
+        self.system_log = Text(log_frame, height=4, bg=self.colors['grid'], fg=self.colors['success_dark'],
                                font=self.mono_font, wrap=tk.WORD, relief=tk.FLAT, bd=0)
 
         log_scrollbar = Scrollbar(log_frame, orient=tk.VERTICAL, command=self.system_log.yview)
@@ -1122,7 +1127,7 @@ class FullyIntegratedRobotGUI:
         header.pack_propagate(False)
 
         Label(header, text="CAMERA VIEWS", bg=self.colors['accent'],
-               fg=self.colors['text'], font=self.header_font).pack(pady=8)
+               fg=self.colors['accent_dark'], font=self.header_font).pack(pady=8)
 
         # Camera views container
         camera_container = Frame(parent, bg=self.colors['panel_bg'])
@@ -1134,7 +1139,7 @@ class FullyIntegratedRobotGUI:
 
         for i, camera_name in enumerate(cameras):
             # Camera frame
-            cam_frame = Frame(camera_container, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+            cam_frame = Frame(camera_container, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
             if i == 0:
                 cam_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
             elif i == 1:
@@ -1143,13 +1148,13 @@ class FullyIntegratedRobotGUI:
                 cam_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
 
             # Camera label
-            Label(cam_frame, text=camera_name, bg=self.colors['bg'],
-                   fg=self.colors['accent_light'], font=self.default_font).pack(pady=5)
-            
+            Label(cam_frame, text=camera_name, bg=self.colors['grid'],
+                   fg=self.colors['accent_dark'], font=self.default_font).pack(pady=5)
+
             # Camera canvas (real video feed)
-            canvas = Canvas(cam_frame, bg=self.colors['grid'], width=320, height=180)
+            canvas = Canvas(cam_frame, bg=self.colors['bg'], width=320, height=180)
             canvas.pack(padx=5, pady=5)
-            
+
             self.camera_canvases[camera_name.lower().replace(' ', '_')] = canvas
             
     def create_control_and_manipulator_panel(self, parent):
@@ -1160,7 +1165,7 @@ class FullyIntegratedRobotGUI:
         header.pack_propagate(False)
 
         Label(header, text="CONTROL STATUS & MANIPULATOR", bg=self.colors['accent'],
-               fg=self.colors['text'], font=self.header_font).pack(pady=8)
+               fg=self.colors['accent_dark'], font=self.header_font).pack(pady=8)
 
         # Content container
         content_frame = Frame(parent, bg=self.colors['panel_bg'])
@@ -1171,13 +1176,13 @@ class FullyIntegratedRobotGUI:
         conn_frame.pack(fill=tk.X, pady=10)
 
         Label(conn_frame, text="ROBOT CONNECTION", bg=self.colors['panel_bg'],
-               fg=self.colors['accent_light'], font=self.default_font).pack(anchor=tk.W)
+               fg=self.colors['accent_dark'], font=self.default_font).pack(anchor=tk.W)
 
         # Namespace input
-        ns_frame = Frame(conn_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        ns_frame = Frame(conn_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         ns_frame.pack(fill=tk.X, pady=5)
 
-        Label(ns_frame, text="Namespace:", bg=self.colors['bg'],
+        Label(ns_frame, text="Namespace:", bg=self.colors['grid'],
                fg=self.colors['text'], font=self.default_font).pack(side=tk.LEFT, padx=10, pady=5)
 
         Entry(ns_frame, textvariable=self.robot_namespace, bg=self.colors['panel_bg'],
@@ -1188,56 +1193,56 @@ class FullyIntegratedRobotGUI:
         button_frame.pack(fill=tk.X, pady=5)
 
         self.connect_btn = Button(button_frame, text="CONNECT", command=self.connect_robot,
-                                 bg=self.colors['success'], fg=self.colors['bg'],
+                                 bg=self.colors['success'], fg=self.colors['success_dark'],
                                  font=self.default_font, width=12, relief=tk.FLAT, bd=0)
         self.connect_btn.pack(side=tk.LEFT, padx=2)
 
         self.disconnect_btn = Button(button_frame, text="DISCONNECT", command=self.disconnect_robot,
-                                    bg=self.colors['warning'], fg=self.colors['bg'],
+                                    bg=self.colors['warning'], fg=self.colors['warning_dark'],
                                     font=self.default_font, width=12, state=tk.DISABLED, relief=tk.FLAT, bd=0)
         self.disconnect_btn.pack(side=tk.LEFT, padx=2)
 
         self.emergency_btn = Button(button_frame, text="E-STOP", command=self.emergency_stop_action,
-                                   bg=self.colors['danger'], fg=self.colors['bg'],
+                                   bg=self.colors['danger'], fg=self.colors['danger_dark'],
                                    font=self.default_font, width=12, relief=tk.FLAT, bd=0)
         self.emergency_btn.pack(side=tk.LEFT, padx=2)
 
         # Control status display
-        control_status_frame = Frame(content_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        control_status_frame = Frame(content_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         control_status_frame.pack(fill=tk.X, pady=10)
 
-        Label(control_status_frame, text="CONTROL STATUS", bg=self.colors['bg'],
-               fg=self.colors['accent_light'], font=self.default_font).pack(anchor=tk.W, padx=10, pady=5)
+        Label(control_status_frame, text="CONTROL STATUS", bg=self.colors['grid'],
+               fg=self.colors['accent_dark'], font=self.default_font).pack(anchor=tk.W, padx=10, pady=5)
 
         self.control_info_display = Label(control_status_frame,
                                          text=f"Linear: {self.target_velocity['linear']:.2f}m/s | Angular: {self.target_velocity['angular']:.2f}rad/s",
-                                         bg=self.colors['bg'], fg=self.colors['text'],
+                                         bg=self.colors['grid'], fg=self.colors['text'],
                                          font=self.mono_font)
         self.control_info_display.pack(anchor=tk.W, padx=10, pady=5)
 
         # Active keys display
-        active_keys_frame = Frame(content_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        active_keys_frame = Frame(content_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         active_keys_frame.pack(fill=tk.X, pady=10)
 
-        Label(active_keys_frame, text="ACTIVE CONTROLS", bg=self.colors['bg'],
-               fg=self.colors['accent_light'], font=self.default_font).pack(anchor=tk.W, padx=10, pady=5)
+        Label(active_keys_frame, text="ACTIVE CONTROLS", bg=self.colors['grid'],
+               fg=self.colors['accent_dark'], font=self.default_font).pack(anchor=tk.W, padx=10, pady=5)
 
         self.active_keys_display = Label(active_keys_frame, text="No keys pressed",
-                                         bg=self.colors['bg'], fg=self.colors['text_secondary'],
+                                         bg=self.colors['grid'], fg=self.colors['text_secondary'],
                                          font=self.mono_font)
         self.active_keys_display.pack(anchor=tk.W, padx=10, pady=5)
 
         # Keyboard controls info
-        keyboard_info_frame = Frame(content_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        keyboard_info_frame = Frame(content_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         keyboard_info_frame.pack(fill=tk.X, pady=10)
 
-        Label(keyboard_info_frame, text="KEYBOARD CONTROLS", bg=self.colors['bg'],
-               fg=self.colors['accent_light'], font=self.default_font).pack(anchor=tk.W, padx=10, pady=5)
+        Label(keyboard_info_frame, text="KEYBOARD CONTROLS", bg=self.colors['grid'],
+               fg=self.colors['accent_dark'], font=self.default_font).pack(anchor=tk.W, padx=10, pady=5)
 
         controls_text = """W/S: Forward/Backward | A/D: Left/Right | SPACE: Stop
 Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: E-Stop"""
 
-        Label(keyboard_info_frame, text=controls_text, bg=self.colors['bg'],
+        Label(keyboard_info_frame, text=controls_text, bg=self.colors['grid'],
                fg=self.colors['text_secondary'], font=self.mono_font, justify=tk.LEFT).pack(anchor=tk.W, padx=10, pady=5)
 
         # Manipulator controls (single line layout)
@@ -1245,10 +1250,10 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
         manip_frame.pack(fill=tk.X, pady=10)
 
         Label(manip_frame, text="MANIPULATOR CONTROL (5 JOINTS)", bg=self.colors['panel_bg'],
-               fg=self.colors['accent_light'], font=self.default_font).pack(anchor=tk.W)
+               fg=self.colors['accent_dark'], font=self.default_font).pack(anchor=tk.W)
 
         # Single line manipulator controls
-        manip_control_frame = Frame(manip_frame, bg=self.colors['bg'], relief=tk.FLAT, bd=0)
+        manip_control_frame = Frame(manip_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
         manip_control_frame.pack(fill=tk.X, pady=5)
 
         # Joint controls in single line
