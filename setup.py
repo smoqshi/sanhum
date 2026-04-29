@@ -45,6 +45,9 @@ class UniversalInstaller:
         self.script_dir = Path(__file__).parent
         self.project_root = self.script_dir
 
+        # Detect Raspberry Pi
+        self.is_raspberry_pi = self._detect_raspberry_pi()
+
         # Colors for output
         self.colors = {
             'red': '\033[0;31m',
@@ -56,15 +59,56 @@ class UniversalInstaller:
         }
 
         # Installation steps tracking
-        self.steps = [
-            "Check system requirements",
-            "Install ROS2 Jazzy",
-            "Install dependencies",
-            "Build project",
-            "Setup environment"
-        ]
+        if self.is_raspberry_pi:
+            self.steps = [
+                "Check system requirements",
+                "Install Python dependencies",
+                "Setup WiFi server service",
+                "Enable SSH",
+                "Setup environment"
+            ]
+        elif self.platform == 'windows':
+            self.steps = [
+                "Check system requirements",
+                "Install Python dependencies",
+                "Setup environment"
+            ]
+        else:  # Linux (not RPi)
+            self.steps = [
+                "Check system requirements",
+                "Install ROS2 Jazzy",
+                "Install dependencies",
+                "Build project",
+                "Setup environment"
+            ]
         self.current_step = 0
         self.completed_steps = []
+
+    def _detect_raspberry_pi(self):
+        """Detect if running on Raspberry Pi"""
+        if self.platform != 'linux':
+            return False
+
+        try:
+            # Check for Raspberry Pi in /proc/cpuinfo
+            with open('/proc/cpuinfo', 'r') as f:
+                cpuinfo = f.read()
+                if 'Raspberry Pi' in cpuinfo or 'BCM' in cpuinfo:
+                    return True
+        except:
+            pass
+
+        try:
+            # Check for Raspberry Pi model file
+            if Path('/sys/firmware/devicetree/base/model').exists():
+                with open('/sys/firmware/devicetree/base/model', 'r') as f:
+                    model = f.read()
+                    if 'Raspberry Pi' in model:
+                        return True
+        except:
+            pass
+
+        return False
 
     def print_installation_state(self):
         """Print visual representation of installation state"""
@@ -391,7 +435,7 @@ class UniversalInstaller:
         print()
 
         # Install Python GUI dependencies
-        python_deps = ["pyserial", "opencv-python", "pillow"]
+        python_deps = ["pyserial", "opencv-python", "pillow", "paramiko"]
         for dep in python_deps:
             self.color_print(f"  Installing {dep}...", 'blue')
             success, _, _ = self.run_command(f"pip install --user --no-cache-dir {dep}")
@@ -658,7 +702,7 @@ class UniversalInstaller:
 
             # Install Python GUI dependencies
             self.color_print("Installing Python GUI dependencies...", 'blue')
-            python_deps = ["pyserial", "opencv-python", "pillow"]
+            python_deps = ["pyserial", "opencv-python", "pillow", "paramiko"]
             for dep in python_deps:
                 self.color_print(f"  Installing {dep}...", 'blue')
                 success, _, _ = self.run_command(f"pip install --user --no-cache-dir {dep}")
@@ -763,27 +807,142 @@ pause
         self.color_print("✓ Environment setup completed", 'green')
         self.complete_step("Setup environment")
         return True
+
+    def install_rpi_dependencies(self):
+        """Install Python dependencies on Raspberry Pi"""
+        self.color_print("[Step 2] Installing Python dependencies...", 'blue')
+        print()
+
+        # Install Python packages
+        python_deps = ["pyserial", "opencv-python", "pillow"]
+        for dep in python_deps:
+            self.color_print(f"  Installing {dep}...", 'blue')
+            success, _, _ = self.run_command(f"pip3 install --user --no-cache-dir {dep}")
+            if not success:
+                self.color_print(f"  Failed to install {dep}", 'yellow')
+            else:
+                self.color_print(f"  ✓ {dep} installed", 'green')
+
+        self.complete_step("Install Python dependencies")
+        return True
+
+    def setup_wifi_service(self):
+        """Setup WiFi server as systemd service on Raspberry Pi"""
+        self.color_print("[Step 3] Setting up WiFi server service...", 'blue')
+        print()
+
+        # Check if running as root
+        if os.geteuid() != 0:
+            self.color_print("Error: This step requires root privileges", 'red')
+            self.color_print("Please run with sudo", 'red')
+            return False
+
+        # Copy systemd service file
+        service_file = self.script_dir / "scripts" / "wifi-server.service"
+        if not service_file.exists():
+            self.color_print(f"Service file not found: {service_file}", 'red')
+            return False
+
+        # Copy to systemd directory
+        success, _, _ = self.run_command(f"cp {service_file} /etc/systemd/system/")
+        if not success:
+            self.color_print("Failed to copy service file", 'red')
+            return False
+        self.color_print("✓ Service file copied", 'green')
+
+        # Reload systemd
+        success, _, _ = self.run_command("systemctl daemon-reload")
+        if not success:
+            self.color_print("Failed to reload systemd", 'red')
+            return False
+
+        # Enable service
+        success, _, _ = self.run_command("systemctl enable wifi-server")
+        if not success:
+            self.color_print("Failed to enable service", 'red')
+            return False
+        self.color_print("✓ Service enabled", 'green')
+
+        # Start service
+        success, _, _ = self.run_command("systemctl start wifi-server")
+        if not success:
+            self.color_print("Failed to start service", 'red')
+            return False
+        self.color_print("✓ Service started", 'green')
+
+        # Check status
+        success, output, _ = self.run_command("systemctl status wifi-server --no-pager", capture_output=True)
+        if success:
+            self.color_print("Service status:", 'blue')
+            for line in output.split('\n')[:5]:
+                if line.strip():
+                    self.color_print(f"  {line.strip()}", 'cyan')
+
+        self.complete_step("Setup WiFi server service")
+        return True
+
+    def enable_ssh(self):
+        """Enable SSH on Raspberry Pi"""
+        self.color_print("[Step 4] Enabling SSH...", 'blue')
+        print()
+
+        # Check if SSH is already enabled
+        success, _, _ = self.run_command("systemctl is-active --quiet ssh", capture_output=True)
+        if success:
+            self.color_print("✓ SSH is already enabled", 'green')
+        else:
+            # Enable SSH
+            success, _, _ = self.run_command("systemctl enable ssh")
+            if not success:
+                self.color_print("Failed to enable SSH", 'yellow')
+            else:
+                self.color_print("✓ SSH enabled", 'green')
+
+            # Start SSH
+            success, _, _ = self.run_command("systemctl start ssh")
+            if not success:
+                self.color_print("Failed to start SSH", 'yellow')
+            else:
+                self.color_print("✓ SSH started", 'green')
+
+        self.complete_step("Enable SSH")
+        return True
         
     def install_all(self):
         """Main installation function"""
         self.print_header()
 
+        # Print platform info
+        if self.is_raspberry_pi:
+            self.color_print("Platform: Raspberry Pi detected", 'green')
+        else:
+            self.color_print(f"Platform: {self.platform}", 'blue')
+        print()
+
         # Check modules and dependencies first
-        self.color_print("[Step 1/5] Checking system requirements...", 'blue')
+        self.color_print("[Step 1] Checking system requirements...", 'blue')
         if not self.check_modules():
             return False
         self.complete_step("Check system requirements")
 
         try:
             # Platform-specific installation
-            if self.platform == 'windows':
-                self.color_print("\nStarting Windows installation...", 'blue')
+            if self.is_raspberry_pi:
+                self.color_print("\nStarting Raspberry Pi installation...", 'blue')
                 print()
 
-                # Check if ROS2 is already installed
-                if not Path("C:/dev/ros2/jazzy/setup.bat").exists():
-                    if not self.install_windows_ros2():
-                        return False
+                if not self.install_rpi_dependencies():
+                    return False
+
+                if not self.setup_wifi_service():
+                    return False
+
+                if not self.enable_ssh():
+                    return False
+
+            elif self.platform == 'windows':
+                self.color_print("\nStarting Windows installation...", 'blue')
+                print()
 
                 if not self.install_windows_dependencies():
                     return False
@@ -798,12 +957,11 @@ pause
                 if not self.install_linux_dependencies():
                     return False
 
+                if not self.build_project():
+                    return False
+
             else:
                 self.color_print(f"Unsupported platform: {self.platform}", 'red')
-                return False
-
-            # Build project
-            if not self.build_project():
                 return False
 
             # Setup environment
@@ -820,15 +978,35 @@ pause
             # Print summary
             self.color_print("Installation Summary:", 'blue')
             self.color_print("  ✓ System requirements checked", 'green')
-            self.color_print("  ✓ ROS2 Jazzy installed", 'green')
-            self.color_print("  ✓ Dependencies installed (Qt, OpenCV, etc.)", 'green')
-            self.color_print("  ✓ Sanhum robot project built", 'green')
+
+            if self.is_raspberry_pi:
+                self.color_print("  ✓ Python dependencies installed", 'green')
+                self.color_print("  ✓ WiFi server service configured", 'green')
+                self.color_print("  ✓ SSH enabled", 'green')
+            elif self.platform == 'windows':
+                self.color_print("  ✓ Python dependencies installed", 'green')
+            else:
+                self.color_print("  ✓ ROS2 Jazzy installed", 'green')
+                self.color_print("  ✓ Dependencies installed", 'green')
+                self.color_print("  ✓ Sanhum robot project built", 'green')
+
             self.color_print("  ✓ Environment configured", 'green')
             print()
 
             # Print next steps
             self.color_print("Next steps:", 'blue')
-            if self.platform == 'windows':
+            if self.is_raspberry_pi:
+                self.color_print("  1. WiFi server is running as a service", 'blue')
+                self.color_print("  2. Check status: sudo systemctl status wifi-server", 'blue')
+                self.color_print("  3. View logs: sudo journalctl -u wifi-server -f", 'blue')
+                self.color_print("  4. Connect from Windows GUI using RPi IP address", 'blue')
+                self.color_print("  5. Current IP addresses:", 'blue')
+                success, output, _ = self.run_command('ip addr show | grep "inet " | grep -v "127.0.0.1"', capture_output=True)
+                if success:
+                    for line in output.split('\n'):
+                        if line.strip():
+                            self.color_print(f"     {line.strip()}", 'cyan')
+            elif self.platform == 'windows':
                 self.color_print("  1. Double-click: start_sanhum.bat", 'blue')
                 self.color_print("  2. Or run from command prompt:", 'blue')
                 self.color_print("     cd /d \"{}\"".format(self.project_root), 'blue')

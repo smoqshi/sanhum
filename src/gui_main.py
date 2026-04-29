@@ -6,15 +6,24 @@ Complete integration of all project modules: ESP32, Arduino, Cameras, etc.
 
 import sys
 import tkinter as tk
-from tkinter import messagebox, filedialog, Canvas, Frame, Label, Button, Text, Scrollbar, Entry, StringVar, DoubleVar, BooleanVar, IntVar, Scale
+from tkinter import messagebox, filedialog, Canvas, Frame, Label, Button, Text, Scrollbar, Entry, StringVar, DoubleVar, BooleanVar, IntVar, Scale, Radiobutton
 import os
 from pathlib import Path
 import threading
 import time
 import json
 import math
+import socket
 from datetime import datetime
 from collections import defaultdict
+
+# Try to import paramiko for SSH
+try:
+    import paramiko
+    SSH_AVAILABLE = True
+except ImportError:
+    SSH_AVAILABLE = False
+    print("Warning: paramiko not available - SSH feature disabled")
 
 # Fallback class for RobotInterfaceManager (used when ROS2 is not available)
 class RobotInterfaceManager:
@@ -479,6 +488,10 @@ class FullyIntegratedRobotGUI:
         self.emergency_stop = False
         self.simulation_mode = True
         self.robot_namespace = StringVar(value="sanhum_robot")
+        self.robot_ip = None
+        self.wifi_socket = None
+        self.ssh_client = None
+        self.joint_sliders = []
         
         # Initialize hardware manager
         try:
@@ -859,7 +872,7 @@ class FullyIntegratedRobotGUI:
                     self.manipulator_vars['joint5'].get()
                 ]
                 self.hardware_manager.send_joint_command(joint_positions)
-                
+
                 # Send gripper command
                 gripper_open = self.manipulator_vars['gripper'].get()
                 self.hardware_manager.send_gripper_command(gripper_open)
@@ -872,7 +885,29 @@ class FullyIntegratedRobotGUI:
                 joint5 = self.manipulator_vars['joint5'].get()
                 gripper = self.manipulator_vars['gripper'].get()
                 self.robot_sim.set_manipulator_joints(joint1, joint2, joint3, joint4, joint5, gripper)
+
+            # Send manipulator commands via WiFi if connected
+            if self.wifi_socket and self.connected and not self.simulation_mode:
+                self._send_wifi_command({
+                    'type': 'manipulator',
+                    'joints': [
+                        self.manipulator_vars['joint1'].get(),
+                        self.manipulator_vars['joint2'].get(),
+                        self.manipulator_vars['joint3'].get(),
+                        self.manipulator_vars['joint4'].get(),
+                        self.manipulator_vars['joint5'].get()
+                    ],
+                    'gripper': self.manipulator_vars['gripper'].get()
+                })
                 
+            # Send commands via WiFi if connected
+            if self.wifi_socket and self.connected and not self.simulation_mode:
+                self._send_wifi_command({
+                    'type': 'velocity',
+                    'linear': self.target_velocity['linear'],
+                    'angular': self.target_velocity['angular']
+                })
+
             # Send ROS2 commands if available
             if self.ros_manager and self.ros_manager.get_interface() and self.connected:
                 self.ros_manager.get_interface().send_velocity_command(
@@ -935,6 +970,9 @@ class FullyIntegratedRobotGUI:
         menubar.add_cascade(label="SYSTEM", menu=system_menu)
         system_menu.add_command(label="Connect Robot", command=self.connect_robot)
         system_menu.add_command(label="Disconnect Robot", command=self.disconnect_robot)
+        system_menu.add_separator()
+        if SSH_AVAILABLE:
+            system_menu.add_command(label="SSH to Raspberry Pi", command=self.open_ssh_terminal)
         system_menu.add_separator()
         system_menu.add_command(label="Emergency Stop", command=self.emergency_stop_action)
         system_menu.add_command(label="Reset System", command=self.reset_system)
@@ -1295,11 +1333,13 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
                    fg=self.colors['text'], font=("Arial", 7, "bold")).pack()
             
             # Scale (vertical orientation for compactness)
-            Scale(joint_frame, from_=min_val, to=max_val, resolution=1,
+            slider = Scale(joint_frame, from_=min_val, to=max_val, resolution=1,
                   orient=tk.VERTICAL, variable=self.manipulator_vars[var_name],
                   bg=self.colors['panel_bg'], fg=self.colors['text'],
                   troughcolor=self.colors['grid'], activebackground=self.colors['accent'],
-                  length=60, width=5).pack()
+                  length=60, width=5)
+            slider.pack()
+            self.joint_sliders.append(slider)
             
             # Value display
             value_label = Label(joint_frame, text="0°", bg=self.colors['panel_bg'],
@@ -1736,11 +1776,11 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
         
     # Control functions
     def connect_robot(self):
-        """Connect to robot with mode selection dialog"""
-        # Create connection dialog
+        """Connect to robot via WiFi IP"""
+        # Create simple connection dialog
         dialog = tk.Toplevel(self.root)
-        dialog.title("Select Connection Mode")
-        dialog.geometry("400x300")
+        dialog.title("Connect to Robot")
+        dialog.geometry("350x250")
         dialog.configure(bg=self.colors['panel_bg'])
         dialog.transient(self.root)
         dialog.grab_set()
@@ -1752,14 +1792,34 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
         dialog.geometry(f"+{x}+{y}")
 
         # Title
-        Label(dialog, text="Select Connection Mode", bg=self.colors['panel_bg'],
+        Label(dialog, text="Connect to Robot", bg=self.colors['panel_bg'],
                fg=self.colors['accent_dark'], font=self.header_font).pack(pady=20)
 
+        # IP address input
+        ip_frame = Frame(dialog, bg=self.colors['panel_bg'])
+        ip_frame.pack(pady=10)
+
+        Label(ip_frame, text="Robot IP Address:", bg=self.colors['panel_bg'],
+               fg=self.colors['text'], font=self.default_font).pack(anchor=tk.W)
+
+        ip_var = StringVar(value="192.168.1.100")
+        Entry(ip_frame, textvariable=ip_var, bg=self.colors['grid'], fg=self.colors['text'],
+              font=self.default_font, width=25, relief=tk.FLAT, bd=0).pack(pady=5)
+
         # Mode selection
-        mode_var = tk.StringVar(value="simulation")
+        mode_var = tk.StringVar(value="wifi")
+
+        Radiobutton(ip_frame, text="WiFi Connection", variable=mode_var,
+                   value="wifi", bg=self.colors['panel_bg'], fg=self.colors['text'],
+                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
+
+        Radiobutton(ip_frame, text="Simulation Mode", variable=mode_var,
+                   value="simulation", bg=self.colors['panel_bg'], fg=self.colors['text'],
+                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
 
         def on_connect():
             mode = mode_var.get()
+            ip = ip_var.get()
             dialog.destroy()
 
             if mode == "simulation":
@@ -1768,51 +1828,28 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
                 self.connected = True
                 self.update_connection_status()
 
-            elif mode == "raspberry_pi":
-                # Try to load GPIO interface
-                if load_gpio_interface():
-                    self.simulation_mode = False
-                    self.add_log("Raspberry Pi mode activated - GPIO loaded")
-                    self.connected = True
-                    self.update_connection_status()
-                else:
-                    self.simulation_mode = True
-                    self.add_log("GPIO not available - falling back to simulation mode")
-                    self.connected = True
-                    self.update_connection_status()
-
-            elif mode == "ros2":
+            elif mode == "wifi":
                 self.simulation_mode = False
-                if self.ros_manager:
-                    namespace = self.robot_namespace.get()
-                    if self.ros_manager.get_interface():
-                        success = self.ros_manager.get_interface().connect(namespace)
-                        if success:
-                            self.add_log(f"Connected to ROS2 robot: {namespace}")
-                            self.connected = True
-                        else:
-                            self.add_log(f"Failed to connect to ROS2 robot: {namespace}")
-                            self.simulation_mode = True
-                else:
-                    self.add_log("ROS2 not available - falling back to simulation")
+                self.robot_ip = ip
+                self.add_log(f"Connecting to robot at {ip}...")
+                try:
+                    # Connect via socket
+                    self.wifi_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.wifi_socket.settimeout(5.0)
+                    self.wifi_socket.connect((ip, 5000))
+                    self.add_log(f"Connected to robot at {ip}")
+                    self.connected = True
+                    self.update_connection_status()
+
+                    # Start telemetry receive thread
+                    telemetry_thread = threading.Thread(target=self._receive_telemetry, daemon=True)
+                    telemetry_thread.start()
+                except Exception as e:
+                    self.add_log(f"Failed to connect: {e}")
                     self.simulation_mode = True
-                self.update_connection_status()
-
-        # Radio buttons
-        modes_frame = Frame(dialog, bg=self.colors['panel_bg'])
-        modes_frame.pack(pady=20)
-
-        Radiobutton(modes_frame, text="Simulation Mode (No Hardware)", variable=mode_var,
-                   value="simulation", bg=self.colors['panel_bg'], fg=self.colors['text'],
-                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
-
-        Radiobutton(modes_frame, text="Raspberry Pi (GPIO Direct)", variable=mode_var,
-                   value="raspberry_pi", bg=self.colors['panel_bg'], fg=self.colors['text'],
-                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
-
-        Radiobutton(modes_frame, text="ROS2 Network", variable=mode_var,
-                   value="ros2", bg=self.colors['panel_bg'], fg=self.colors['text'],
-                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
+                    self.add_log("Falling back to simulation mode")
+                    self.connected = True
+                    self.update_connection_status()
 
         # Connect button
         Button(dialog, text="Connect", command=on_connect,
@@ -1821,17 +1858,242 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
                     
     def disconnect_robot(self):
         """Disconnect from robot"""
+        if self.wifi_socket:
+            try:
+                self.wifi_socket.close()
+                self.wifi_socket = None
+            except:
+                pass
+
         if self.ros_manager and self.ros_manager.get_interface():
             self.ros_manager.get_interface().disconnect()
-            
+
         self.connected = False
+        self.robot_ip = None
         self.update_connection_status()
         self.add_log("Disconnected from robot")
+
+    def _receive_telemetry(self):
+        """Receive telemetry from robot via WiFi"""
+        while self.connected and self.wifi_socket:
+            try:
+                self.wifi_socket.settimeout(1.0)
+                data = self.wifi_socket.recv(4096)
+                if not data:
+                    break
+
+                # Parse JSON telemetry
+                telemetry = json.loads(data.decode('utf-8'))
+                self._process_telemetry(telemetry)
+
+            except socket.timeout:
+                continue
+            except json.JSONDecodeError:
+                continue
+            except Exception as e:
+                print(f"Telemetry receive error: {e}")
+                break
+
+        # Disconnected
+        if self.connected:
+            self.add_log("Lost connection to robot")
+            self.connected = False
+            self.update_connection_status()
+
+    def _process_telemetry(self, telemetry):
+        """Process telemetry data from robot"""
+        if telemetry.get('type') == 'telemetry':
+            # Update velocity display
+            velocity = telemetry.get('velocity', {})
+            self.target_velocity['linear'] = velocity.get('linear', 0.0)
+            self.target_velocity['angular'] = velocity.get('angular', 0.0)
+
+            # Update manipulator display
+            manipulator = telemetry.get('manipulator', {})
+            joints = manipulator.get('joints', [0.0, 0.0, 0.0, 0.0, 0.0])
+            for i, slider in enumerate(self.joint_sliders):
+                slider.set(joints[i])
+
+            # Update sensor display
+            sensors = telemetry.get('sensors', {})
+            us_f = sensors.get('ultrasonic_front', 0.0)
+            us_r = sensors.get('ultrasonic_rear', 0.0)
+            ir_l = sensors.get('infrared_left', 0.0)
+            ir_r = sensors.get('infrared_right', 0.0)
+            self.sensor_display.config(text=f"US-F: {us_f:.2f}m  US-R: {us_r:.2f}m  IR-L: {ir_l:.2f}m  IR-R: {ir_r:.2f}m")
+
+            # Update emergency stop status
+            if telemetry.get('emergency_stop'):
+                self.emergency_stop = True
+                self.emergency_indicator.config(bg=self.colors['danger'], fg=self.colors['danger_dark'], text="EMERGENCY STOP: ON")
+            else:
+                self.emergency_stop = False
+                self.emergency_indicator.config(bg=self.colors['success'], fg=self.colors['success_dark'], text="EMERGENCY STOP: OFF")
+
+    def _send_wifi_command(self, command):
+        """Send command to robot via WiFi"""
+        if self.wifi_socket and self.connected:
+            try:
+                message = json.dumps(command).encode('utf-8')
+                self.wifi_socket.sendall(message)
+            except Exception as e:
+                print(f"WiFi command error: {e}")
+                self.add_log(f"Command failed: {e}")
+
+    def open_ssh_terminal(self):
+        """Open SSH terminal to Raspberry Pi"""
+        if not SSH_AVAILABLE:
+            messagebox.showerror("SSH Not Available", "Please install paramiko: pip install paramiko")
+            return
+
+        # Create SSH connection dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("SSH to Raspberry Pi")
+        dialog.geometry("400x350")
+        dialog.configure(bg=self.colors['panel_bg'])
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Center dialog
+        dialog.update_idletasks()
+        x = (self.root.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (self.root.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        # Title
+        Label(dialog, text="SSH Connection", bg=self.colors['panel_bg'],
+               fg=self.colors['accent_dark'], font=self.header_font).pack(pady=20)
+
+        # Connection fields
+        conn_frame = Frame(dialog, bg=self.colors['panel_bg'])
+        conn_frame.pack(pady=10)
+
+        # IP Address
+        Label(conn_frame, text="IP Address:", bg=self.colors['panel_bg'],
+               fg=self.colors['text'], font=self.default_font).grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        ip_var = StringVar(value=self.robot_ip if self.robot_ip else "192.168.1.100")
+        Entry(conn_frame, textvariable=ip_var, bg=self.colors['grid'], fg=self.colors['text'],
+              font=self.default_font, width=25, relief=tk.FLAT, bd=0).grid(row=0, column=1, padx=5, pady=5)
+
+        # Username
+        Label(conn_frame, text="Username:", bg=self.colors['panel_bg'],
+               fg=self.colors['text'], font=self.default_font).grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        user_var = StringVar(value="pi")
+        Entry(conn_frame, textvariable=user_var, bg=self.colors['grid'], fg=self.colors['text'],
+              font=self.default_font, width=25, relief=tk.FLAT, bd=0).grid(row=1, column=1, padx=5, pady=5)
+
+        # Password
+        Label(conn_frame, text="Password:", bg=self.colors['panel_bg'],
+               fg=self.colors['text'], font=self.default_font).grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
+        pass_var = StringVar()
+        Entry(conn_frame, textvariable=pass_var, bg=self.colors['grid'], fg=self.colors['text'],
+              font=self.default_font, width=25, show="*", relief=tk.FLAT, bd=0).grid(row=2, column=1, padx=5, pady=5)
+
+        def on_connect():
+            ip = ip_var.get()
+            username = user_var.get()
+            password = pass_var.get()
+            dialog.destroy()
+            self._open_ssh_window(ip, username, password)
+
+        # Connect button
+        Button(dialog, text="Connect", command=on_connect,
+               bg=self.colors['success'], fg=self.colors['success_dark'],
+               font=self.default_font, width=15, relief=tk.FLAT, bd=0).pack(pady=20)
+
+    def _open_ssh_window(self, ip, username, password):
+        """Open SSH terminal window"""
+        # Create SSH terminal window
+        ssh_window = tk.Toplevel(self.root)
+        ssh_window.title(f"SSH: {username}@{ip}")
+        ssh_window.geometry("800x600")
+        ssh_window.configure(bg=self.colors['panel_bg'])
+
+        # Terminal output
+        output_frame = Frame(ssh_window, bg=self.colors['panel_bg'])
+        output_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        output_text = Text(output_frame, bg=self.colors['grid'], fg=self.colors['text'],
+                          font=self.mono_font, wrap=tk.WORD, relief=tk.FLAT, bd=0)
+        output_scrollbar = Scrollbar(output_frame, orient=tk.VERTICAL, command=output_text.yview)
+        output_text.configure(yscrollcommand=output_scrollbar.set)
+
+        output_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        output_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Command input
+        input_frame = Frame(ssh_window, bg=self.colors['panel_bg'])
+        input_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        Label(input_frame, text="$", bg=self.colors['panel_bg'],
+               fg=self.colors['accent_dark'], font=self.mono_font).pack(side=tk.LEFT)
+
+        cmd_var = StringVar()
+        cmd_entry = Entry(input_frame, textvariable=cmd_var, bg=self.colors['grid'],
+                         fg=self.colors['text'], font=self.mono_font, relief=tk.FLAT, bd=0)
+        cmd_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        cmd_entry.bind('<Return>', lambda e: self._execute_ssh_command(ip, username, password,
+                                                                        cmd_var.get(), output_text, cmd_var))
+
+        # Connect SSH
+        try:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(ip, username=username, password=password, timeout=10)
+            self.ssh_client = ssh
+            output_text.insert(tk.END, f"Connected to {username}@{ip}\n")
+            output_text.insert(tk.END, "Type 'exit' to close connection\n\n")
+            output_text.see(tk.END)
+        except Exception as e:
+            output_text.insert(tk.END, f"Connection failed: {e}\n")
+            output_text.see(tk.END)
+
+    def _execute_ssh_command(self, ip, username, password, command, output_text, cmd_var):
+        """Execute SSH command"""
+        if not self.ssh_client:
+            output_text.insert(tk.END, "Not connected\n")
+            output_text.see(tk.END)
+            return
+
+        if command.lower() == 'exit':
+            self.ssh_client.close()
+            self.ssh_client = None
+            output_text.insert(tk.END, "Connection closed\n")
+            output_text.see(tk.END)
+            cmd_var.set("")
+            return
+
+        output_text.insert(tk.END, f"$ {command}\n")
+        output_text.see(tk.END)
+
+        try:
+            stdin, stdout, stderr = self.ssh_client.exec_command(command)
+            output = stdout.read().decode('utf-8')
+            error = stderr.read().decode('utf-8')
+
+            if output:
+                output_text.insert(tk.END, output)
+            if error:
+                output_text.insert(tk.END, f"Error: {error}")
+
+            output_text.insert(tk.END, "\n")
+            output_text.see(tk.END)
+        except Exception as e:
+            output_text.insert(tk.END, f"Command failed: {e}\n")
+            output_text.see(tk.END)
+
+        cmd_var.set("")
         
     def emergency_stop_action(self):
         """Emergency stop action"""
         self.emergency_stop = not self.emergency_stop
-        
+
+        # Send emergency stop via WiFi
+        if self.wifi_socket and self.connected and not self.simulation_mode:
+            self._send_wifi_command({
+                'type': 'emergency_stop'
+            })
+
         if self.ros_manager and self.ros_manager.get_interface():
             self.ros_manager.get_interface().emergency_stop_action(self.emergency_stop)
             
