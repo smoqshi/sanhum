@@ -42,20 +42,16 @@ try:
     from hardware_integration import HardwareManager, RobotMode
     from robot_simulation import RobotSimulation, Vector3
     from input_controller import InputController, ControlMode
-    from rpi_gpio_interface import RPiGPIOInterface
     from esp32_interface import get_esp32_interface
     from arduino_interface import get_arduino_interface
     from camera_interface import get_camera_interface
     ROS2_AVAILABLE = True
-    GPIO_AVAILABLE = True
     ALL_MODULES_AVAILABLE = True
 except ImportError as e:
-    print(f"Import error: {e}")
     from hardware_integration import HardwareManager as HardwareManagerFallback, RobotMode as RobotModeFallback
     HardwareManager = HardwareManagerFallback
     RobotMode = RobotModeFallback
     ROS2_AVAILABLE = False
-    GPIO_AVAILABLE = False
     ALL_MODULES_AVAILABLE = False
 
     class InputController:
@@ -63,153 +59,214 @@ except ImportError as e:
         def start(self): pass
         def stop(self): pass
         def get_control_status(self): return {'mode': 'keyboard', 'linear_velocity': 0.0, 'angular_velocity': 0.0}
-    
-    class RPiGPIOInterface:
-        def __init__(self, *args, **kwargs): pass
-        def set_motor_speed(self, *args, **kwargs): pass
-        def stop_all_motors(self): pass
-        def emergency_stop(self): pass
-        def cleanup(self): pass
-    
-    def get_esp32_interface(*args, **kwargs):
-        class ESP32Sim:
-            def connect(self): return True
-            def disconnect(self): pass
-            def send_joint_command(self, *args, **kwargs): return True
-            def send_gripper_command(self, *args, **kwargs): return True
-            def set_joint_callback(self, *args, **kwargs): pass
-            def home_manipulator(self): return True
-            def test_connection(self): return True
-        return ESP32Sim()
-    
-    def get_arduino_interface(*args, **kwargs):
-        class ArduinoSim:
-            def connect(self): return True
-            def disconnect(self): pass
-            def set_sensor_callback(self, *args, **kwargs): pass
-            def test_connection(self): return True
-        return ArduinoSim()
-    
-    def get_camera_interface(*args, **kwargs):
-        class CameraSim:
-            def __init__(self):
-                self.connected = {0: True, 1: True, 2: True}
-            def connect(self): return True
-            def disconnect(self): pass
-            def start_capture(self): pass
-            def stop_capture(self): pass
-            def set_frame_callback(self, *args, **kwargs): pass
-            def get_camera_info(self): return {0: {'connected': True}, 1: {'connected': True}, 2: {'connected': True}}
-        return CameraSim()
-    
-    # Create fallback classes
-    class Vector3:
-        def __init__(self, x, y, z):
-            self.x = x
-            self.y = y
-            self.z = z
-            
-        def __add__(self, other):
-            return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
-            
-        def __sub__(self, other):
-            return Vector3(self.x - other.x, self.y - other.y, self.z - other.z)
-            
-        def __mul__(self, scalar):
-            return Vector3(self.x * scalar, self.y * scalar, self.z * scalar)
-            
-        def magnitude(self):
-            return math.sqrt(self.x**2 + self.y**2 + self.z**2)
-            
-        def normalize(self):
-            mag = self.magnitude()
-            if mag > 0:
-                return Vector3(self.x/mag, self.y/mag, self.z/mag)
-            return Vector3(0, 0, 0)
-    
-    class RobotSimulation:
+
+# GPIO interface - only import on Raspberry Pi or when explicitly requested
+GPIO_AVAILABLE = False
+RPiGPIOInterface = None
+
+def load_gpio_interface():
+    """Load GPIO interface only when connecting to Raspberry Pi"""
+    global GPIO_AVAILABLE, RPiGPIOInterface
+    try:
+        from rpi_gpio_interface import RPiGPIOInterface as GPIO
+        RPiGPIOInterface = GPIO
+        GPIO_AVAILABLE = True
+        return True
+    except ImportError:
+        GPIO_AVAILABLE = False
+        RPiGPIOInterface = None
+        return False
+
+# Fallback GPIO interface for simulation
+class SimGPIOInterface:
+    def __init__(self, *args, **kwargs): pass
+    def set_motor_speed(self, *args, **kwargs): pass
+    def stop_all_motors(self): pass
+    def emergency_stop(self): pass
+    def cleanup(self): pass
+
+# Fallback simulation interfaces
+def get_esp32_interface(*args, **kwargs):
+    class ESP32Sim:
+        def connect(self): return True
+        def disconnect(self): pass
+        def send_joint_command(self, *args, **kwargs): return True
+        def send_gripper_command(self, *args, **kwargs): return True
+        def set_joint_callback(self, *args, **kwargs): pass
+        def home_manipulator(self): return True
+        def test_connection(self): return True
+    return ESP32Sim()
+
+def get_arduino_interface(*args, **kwargs):
+    class ArduinoSim:
+        def connect(self): return True
+        def disconnect(self): pass
+        def set_sensor_callback(self, *args, **kwargs): pass
+        def test_connection(self): return True
+    return ArduinoSim()
+
+def get_camera_interface(*args, **kwargs):
+    class CameraSim:
         def __init__(self):
-            # Load actual robot parameters
-            self.load_robot_params()
-            
-            self.position = Vector3(0.0, 0.0, 0.0)
-            self.orientation = 0.0
-            self.linear_velocity = 0.0
-            self.angular_velocity = 0.0
-            
-            self.joint1_angle = 0.0
-            self.joint2_angle = 0.0
-            self.joint3_angle = 0.0
-            self.joint4_angle = 0.0
-            self.joint5_angle = 0.0
-            self.gripper_open = 0.0
-            
-            self.left_track_position = 0.0
-            self.right_track_position = 0.0
-            self.max_linear_vel = 2.0
-            self.max_angular_vel = 3.14
-            
-        def load_robot_params(self):
-            """Load robot parameters from robot_params.yaml"""
-            # Robot parameters from robot_params.yaml
-            # Convert mm to meters
-            self.chassis_length = 600.0 / 1000.0  # base_length_mm
-            self.chassis_width = 500.0 / 1000.0   # base_width_mm
-            self.chassis_height = 300.0 / 1000.0 # base_height_mm
-            self.track_gauge = 350.0 / 1000.0    # track_gauge_mm
-            self.wheel_diameter = 80.0 / 1000.0  # wheel_diameter_mm
-            self.wheel_radius = self.wheel_diameter / 2.0
-            
-            # Manipulator parameters
-            self.link1_length = 150.0 / 1000.0  # link1_length_mm
-            self.link2_length = 130.0 / 1000.0  # link2_length_mm
-            self.link3_length = 120.0 / 1000.0  # link3_length_mm
-            self.link4_length = 100.0 / 1000.0  # link4_length_mm
-            self.link5_length = 80.0 / 1000.0   # gripper_width_mm
-            self.gripper_width = 80.0 / 1000.0   # gripper_width_mm
-            
-            print(f"Loaded robot params: {self.chassis_length}x{self.chassis_width}m, track gauge: {self.track_gauge}m")
-                
-        def update(self, dt):
-            """Update robot simulation with proper kinematics"""
-            if abs(self.linear_velocity) > 0.01 or abs(self.angular_velocity) > 0.01:
-                # Differential drive kinematics using actual track gauge
-                self.position.x += self.linear_velocity * math.cos(self.orientation) * dt
-                self.position.y += self.linear_velocity * math.sin(self.orientation) * dt
-                self.orientation += self.angular_velocity * dt
-                self.orientation = math.atan2(math.sin(self.orientation), math.cos(self.orientation))
-                
-                # Update track positions for visualization
-                wheel_circumference = 2 * math.pi * self.wheel_radius
-                self.left_track_position += (self.linear_velocity - self.angular_velocity * self.track_gauge/2) * dt / wheel_circumference
-                self.right_track_position += (self.linear_velocity + self.angular_velocity * self.track_gauge/2) * dt / wheel_circumference
-                
-        def set_velocity(self, linear, angular):
-            """Set robot velocities"""
-            self.linear_velocity = max(-self.max_linear_vel, min(self.max_linear_vel, linear))
-            self.angular_velocity = max(-self.max_angular_vel, min(self.max_angular_vel, angular))
-            
-        def set_manipulator_joints(self, joint1, joint2, joint3, joint4, joint5, gripper):
-            """Set manipulator joint angles"""
-            self.joint1_angle = math.radians(joint1)
-            self.joint2_angle = math.radians(joint2)
-            self.joint3_angle = math.radians(joint3)
-            self.joint4_angle = math.radians(joint4)
-            self.joint5_angle = math.radians(joint5)
-            self.gripper_open = max(0.0, min(1.0, gripper / 100.0))
-            
-        def get_chassis_vertices(self):
-            """Get chassis vertices for 3D visualization"""
-            half_length = self.chassis_length / 2
-            half_width = self.chassis_width / 2
-            
+            self.connected = {0: True, 1: True, 2: True}
+        def connect(self): return True
+        def disconnect(self): pass
+        def start_capture(self): pass
+        def stop_capture(self): pass
+        def set_frame_callback(self, *args, **kwargs): pass
+        def get_camera_info(self): return {0: {'connected': True}, 1: {'connected': True}, 2: {'connected': True}}
+    return CameraSim()
+
+# Create fallback classes
+class Vector3:
+    def __init__(self, x, y, z):
+        self.x = x
+        self.y = y
+        self.z = z
+
+    def __add__(self, other):
+        return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
+
+    def __sub__(self, other):
+        return Vector3(self.x - other.x, self.y - other.y, self.z - other.z)
+
+    def __mul__(self, scalar):
+        return Vector3(self.x * scalar, self.y * scalar, self.z * scalar)
+
+    def magnitude(self):
+        return math.sqrt(self.x**2 + self.y**2 + self.z**2)
+
+    def normalize(self):
+        mag = self.magnitude()
+        if mag > 0:
+            return Vector3(self.x/mag, self.y/mag, self.z/mag)
+        return Vector3(0, 0, 0)
+
+class RobotSimulation:
+    def __init__(self):
+        # Load actual robot parameters
+        self.load_robot_params()
+
+        self.position = Vector3(0.0, 0.0, 0.0)
+        self.orientation = 0.0
+        self.linear_velocity = 0.0
+        self.angular_velocity = 0.0
+
+        self.joint1_angle = 0.0
+        self.joint2_angle = 0.0
+        self.joint3_angle = 0.0
+        self.joint4_angle = 0.0
+        self.joint5_angle = 0.0
+        self.gripper_open = 0.0
+
+        self.left_track_position = 0.0
+        self.right_track_position = 0.0
+        self.max_linear_vel = 2.0
+        self.max_angular_vel = 3.14
+
+    def load_robot_params(self):
+        """Load robot parameters from robot_params.yaml"""
+        # Robot parameters from robot_params.yaml
+        # Convert mm to meters
+        self.chassis_length = 600.0 / 1000.0  # base_length_mm
+        self.chassis_width = 500.0 / 1000.0   # base_width_mm
+        self.chassis_height = 300.0 / 1000.0 # base_height_mm
+        self.track_gauge = 350.0 / 1000.0    # track_gauge_mm
+        self.wheel_diameter = 80.0 / 1000.0  # wheel_diameter_mm
+        self.wheel_radius = self.wheel_diameter / 2.0
+
+        # Manipulator parameters
+        self.link1_length = 150.0 / 1000.0  # link1_length_mm
+        self.link2_length = 130.0 / 1000.0  # link2_length_mm
+        self.link3_length = 120.0 / 1000.0  # link3_length_mm
+        self.link4_length = 100.0 / 1000.0  # link4_length_mm
+        self.link5_length = 80.0 / 1000.0   # gripper_width_mm
+        self.gripper_width = 80.0 / 1000.0   # gripper_width_mm
+
+        print(f"Loaded robot params: {self.chassis_length}x{self.chassis_width}m, track gauge: {self.track_gauge}m")
+
+    def update(self, dt):
+        """Update robot simulation with proper kinematics"""
+        if abs(self.linear_velocity) > 0.01 or abs(self.angular_velocity) > 0.01:
+            # Differential drive kinematics using actual track gauge
+            self.position.x += self.linear_velocity * math.cos(self.orientation) * dt
+            self.position.y += self.linear_velocity * math.sin(self.orientation) * dt
+            self.orientation += self.angular_velocity * dt
+            self.orientation = math.atan2(math.sin(self.orientation), math.cos(self.orientation))
+
+            # Update track positions for visualization
+            wheel_circumference = 2 * math.pi * self.wheel_radius
+            self.left_track_position += (self.linear_velocity - self.angular_velocity * self.track_gauge/2) * dt / wheel_circumference
+            self.right_track_position += (self.linear_velocity + self.angular_velocity * self.track_gauge/2) * dt / wheel_circumference
+
+    def set_velocity(self, linear, angular):
+        """Set robot velocities"""
+        self.linear_velocity = max(-self.max_linear_vel, min(self.max_linear_vel, linear))
+        self.angular_velocity = max(-self.max_angular_vel, min(self.max_angular_vel, angular))
+
+    def set_manipulator_joints(self, joint1, joint2, joint3, joint4, joint5, gripper):
+        """Set manipulator joint angles"""
+        self.joint1_angle = math.radians(joint1)
+        self.joint2_angle = math.radians(joint2)
+        self.joint3_angle = math.radians(joint3)
+        self.joint4_angle = math.radians(joint4)
+        self.joint5_angle = math.radians(joint5)
+        self.gripper_open = max(0.0, min(1.0, gripper / 100.0))
+
+    def get_chassis_vertices(self):
+        """Get chassis vertices for 3D visualization"""
+        half_length = self.chassis_length / 2
+        half_width = self.chassis_width / 2
+
+        vertices = [
+            Vector3(-half_length, -half_width, 0),
+            Vector3(half_length, -half_width, 0),
+            Vector3(half_length, half_width, 0),
+            Vector3(-half_length, half_width, 0),
+        ]
+
+        # Transform to world coordinates
+        transformed = []
+        for v in vertices:
+            cos_o = math.cos(self.orientation)
+            sin_o = math.sin(self.orientation)
+            rotated_x = v.x * cos_o - v.y * sin_o
+            rotated_y = v.x * sin_o + v.y * cos_o
+
+            world_pos = Vector3(
+                rotated_x + self.position.x,
+                rotated_y + self.position.y,
+                v.z + self.position.z
+            )
+            transformed.append(world_pos)
+
+        return transformed
+
+    def get_track_vertices(self, side):
+        """Get track vertices for visualization"""
+        half_length = self.chassis_length / 2
+        track_offset = self.track_gauge / 2
+        track_width = 0.08  # 80mm track width
+
+        if side == 'left':
+            offset = -track_offset
+        else:
+            offset = track_offset
+
+        segments = []
+        num_segments = 6  # More segments for smoother tracks
+
+        for i in range(num_segments):
+            x_start = -half_length + (i * self.chassis_length / num_segments)
+            x_end = x_start + (self.chassis_length / num_segments)
+
             vertices = [
-                Vector3(-half_length, -half_width, 0),
-                Vector3(half_length, -half_width, 0),
-                Vector3(half_length, half_width, 0),
-                Vector3(-half_length, half_width, 0),
+                Vector3(x_start, offset - track_width/2, 0),
+                Vector3(x_end, offset - track_width/2, 0),
+                Vector3(x_end, offset + track_width/2, 0.05),  # Track height
+                Vector3(x_start, offset + track_width/2, 0.05),
             ]
-            
+
             # Transform to world coordinates
             transformed = []
             for v in vertices:
@@ -217,210 +274,168 @@ except ImportError as e:
                 sin_o = math.sin(self.orientation)
                 rotated_x = v.x * cos_o - v.y * sin_o
                 rotated_y = v.x * sin_o + v.y * cos_o
-                
+
                 world_pos = Vector3(
                     rotated_x + self.position.x,
                     rotated_y + self.position.y,
                     v.z + self.position.z
                 )
                 transformed.append(world_pos)
-                
-            return transformed
-            
-        def get_track_vertices(self, side):
-            """Get track vertices for visualization"""
-            half_length = self.chassis_length / 2
-            track_offset = self.track_gauge / 2
-            track_width = 0.08  # 80mm track width
-            
-            if side == 'left':
-                offset = -track_offset
-            else:
-                offset = track_offset
-                
-            segments = []
-            num_segments = 6  # More segments for smoother tracks
-            
-            for i in range(num_segments):
-                x_start = -half_length + (i * self.chassis_length / num_segments)
-                x_end = x_start + (self.chassis_length / num_segments)
-                
-                vertices = [
-                    Vector3(x_start, offset - track_width/2, 0),
-                    Vector3(x_end, offset - track_width/2, 0),
-                    Vector3(x_end, offset + track_width/2, 0.05),  # Track height
-                    Vector3(x_start, offset + track_width/2, 0.05),
-                ]
-                
-                # Transform to world coordinates
-                transformed = []
-                for v in vertices:
-                    cos_o = math.cos(self.orientation)
-                    sin_o = math.sin(self.orientation)
-                    rotated_x = v.x * cos_o - v.y * sin_o
-                    rotated_y = v.x * sin_o + v.y * cos_o
-                    
-                    world_pos = Vector3(
-                        rotated_x + self.position.x,
-                        rotated_y + self.position.y,
-                        v.z + self.position.z
-                    )
-                    transformed.append(world_pos)
-                    
-                segments.append(transformed)
-                
-            return segments
-            
-        def get_manipulator_vertices(self):
-            """Get manipulator vertices with proper bone connections"""
-            # Base position on chassis
-            base_x = self.chassis_length / 2
-            base_y = 0
-            base_z = self.chassis_height
-            
-            # Joint positions using proper kinematics
-            # Joint 1 (base rotation) - rotates around Z axis
-            j1_x = base_x
-            j1_y = base_y
-            j1_z = base_z + 0.05  # Small base height
-            
-            # Joint 2 (shoulder) - rotates in XZ plane
-            j2_x = j1_x + self.link1_length * math.cos(self.joint2_angle)
-            j2_y = j1_y + self.link1_length * math.sin(self.joint1_angle)  # Base rotation affects Y
-            j2_z = j1_z + self.link1_length * math.sin(self.joint2_angle)
-            
-            # Joint 3 (elbow) - continues from joint 2
-            total_angle_2_3 = self.joint2_angle + self.joint3_angle
-            j3_x = j2_x + self.link2_length * math.cos(total_angle_2_3)
-            j3_y = j2_y
-            j3_z = j2_z + self.link2_length * math.sin(total_angle_2_3)
-            
-            # Joint 4 (wrist) - continues from joint 3
-            total_angle_3_4 = total_angle_2_3 + self.joint4_angle
-            j4_x = j3_x + self.link3_length * math.cos(total_angle_3_4)
-            j4_y = j3_y
-            j4_z = j3_z + self.link3_length * math.sin(total_angle_3_4)
-            
-            # Joint 5 (end effector) - continues from joint 4
-            total_angle_4_5 = total_angle_3_4 + self.joint5_angle
-            j5_x = j4_x + self.link4_length * math.cos(total_angle_4_5)
-            j5_y = j4_y
-            j5_z = j4_z + self.link4_length * math.sin(total_angle_4_5)
-            
-            # Gripper end position
-            end_x = j5_x + self.link5_length * math.cos(total_angle_4_5)
-            end_y = j5_y
-            end_z = j5_z + self.link5_length * math.sin(total_angle_4_5)
-            
-            
-            # Create bone connections
-            links = [
-                [(base_x, base_y, base_z), (j1_x, j1_y, j1_z)],      # Base to Joint 1
-                [(j1_x, j1_y, j1_z), (j2_x, j2_y, j2_z)],            # Joint 1 to Joint 2
-                [(j2_x, j2_y, j2_z), (j3_x, j3_y, j3_z)],            # Joint 2 to Joint 3
-                [(j3_x, j3_y, j3_z), (j4_x, j4_y, j4_z)],            # Joint 3 to Joint 4
-                [(j4_x, j4_y, j4_z), (j5_x, j5_y, j5_z)],            # Joint 4 to Joint 5
-                [(j5_x, j5_y, j5_z), (end_x, end_y, end_z)],        # Joint 5 to End
-            ]
-            
-            # Transform to world coordinates
-            transformed_links = []
-            for link in links:
-                transformed_link = []
-                for point in link:
-                    x, y, z = point
-                    
-                    cos_o = math.cos(self.orientation)
-                    sin_o = math.sin(self.orientation)
-                    rotated_x = x * cos_o - y * sin_o
-                    rotated_y = x * sin_o + y * cos_o
-                    
-                    world_pos = Vector3(
-                        rotated_x + self.position.x,
-                        rotated_y + self.position.y,
-                        z + self.position.z
-                    )
-                    transformed_link.append(world_pos)
-                    
-                transformed_links.append(transformed_link)
-                
-            return transformed_links
-            
-        def get_gripper_vertices(self):
-            """Get gripper vertices"""
-            if self.gripper_open < 0.1:
-                return []
-                
-            manipulator_links = self.get_manipulator_vertices()
-            if not manipulator_links:
-                return []
-                
-            end_pos = manipulator_links[-1][-1]
-            
-            # Gripper fingers
-            gripper_length = 0.05
-            gripper_width = self.gripper_width * self.gripper_open
-            
-            # Left finger
-            left_finger = [
-                Vector3(end_pos.x - gripper_width/2, end_pos.y, end_pos.z),
-                Vector3(end_pos.x - gripper_width/2, end_pos.y, end_pos.z + gripper_length),
-                Vector3(end_pos.x - gripper_width/4, end_pos.y, end_pos.z + gripper_length),
-                Vector3(end_pos.x - gripper_width/4, end_pos.y, end_pos.z),
-            ]
-            
-            # Right finger
-            right_finger = [
-                Vector3(end_pos.x + gripper_width/4, end_pos.y, end_pos.z),
-                Vector3(end_pos.x + gripper_width/4, end_pos.y, end_pos.z + gripper_length),
-                Vector3(end_pos.x + gripper_width/2, end_pos.y, end_pos.z + gripper_length),
-                Vector3(end_pos.x + gripper_width/2, end_pos.y, end_pos.z),
-            ]
-            
-            return left_finger + right_finger
-            
-        def simulate_sensors(self, obstacles=None):
-            """Simulate sensor readings"""
-            sensor_readings = {
-                'ultrasonic_front': 2.5,
-                'ultrasonic_rear': 2.5,
-                'infrared_left': 0.8,
-                'infrared_right': 0.8
-            }
-            return sensor_readings
-            
-        def reset(self):
-            """Reset robot to initial state"""
-            self.position = Vector3(0.0, 0.0, 0.0)
-            self.orientation = 0.0
-            self.linear_velocity = 0.0
-            self.angular_velocity = 0.0
-            self.joint1_angle = 0.0
-            self.joint2_angle = 0.0
-            self.joint3_angle = 0.0
-            self.joint4_angle = 0.0
-            self.joint5_angle = 0.0
-            self.gripper_open = 0.0
-            self.left_track_position = 0.0
-            self.right_track_position = 0.0
 
-    class InputController:
-        def __init__(self, gui_callback=None):
-            self.gui_callback = gui_callback
-            self.running = False
-            self.linear_velocity = 0.0
-            self.angular_velocity = 0.0
-            self.max_linear_vel = 2.0
-            self.max_angular_vel = 3.14
-            
-        def start(self):
-            self.running = True
-            
-        def stop(self):
-            self.running = False
-            
-        def get_control_status(self):
-            return {'mode': 'keyboard', 'linear_velocity': self.linear_velocity, 'angular_velocity': self.angular_velocity}
+            segments.append(transformed)
+
+        return segments
+
+    def get_manipulator_vertices(self):
+        """Get manipulator vertices with proper bone connections"""
+        # Base position on chassis
+        base_x = self.chassis_length / 2
+        base_y = 0
+        base_z = self.chassis_height
+
+        # Joint positions using proper kinematics
+        # Joint 1 (base rotation) - rotates around Z axis
+        j1_x = base_x
+        j1_y = base_y
+        j1_z = base_z + 0.05  # Small base height
+
+        # Joint 2 (shoulder) - rotates in XZ plane
+        j2_x = j1_x + self.link1_length * math.cos(self.joint2_angle)
+        j2_y = j1_y + self.link1_length * math.sin(self.joint1_angle)  # Base rotation affects Y
+        j2_z = j1_z + self.link1_length * math.sin(self.joint2_angle)
+
+        # Joint 3 (elbow) - continues from joint 2
+        total_angle_2_3 = self.joint2_angle + self.joint3_angle
+        j3_x = j2_x + self.link2_length * math.cos(total_angle_2_3)
+        j3_y = j2_y
+        j3_z = j2_z + self.link2_length * math.sin(total_angle_2_3)
+
+        # Joint 4 (wrist) - continues from joint 3
+        total_angle_3_4 = total_angle_2_3 + self.joint4_angle
+        j4_x = j3_x + self.link3_length * math.cos(total_angle_3_4)
+        j4_y = j3_y
+        j4_z = j3_z + self.link3_length * math.sin(total_angle_3_4)
+
+        # Joint 5 (end effector) - continues from joint 4
+        total_angle_4_5 = total_angle_3_4 + self.joint5_angle
+        j5_x = j4_x + self.link4_length * math.cos(total_angle_4_5)
+        j5_y = j4_y
+        j5_z = j4_z + self.link4_length * math.sin(total_angle_4_5)
+
+        # Gripper end position
+        end_x = j5_x + self.link5_length * math.cos(total_angle_4_5)
+        end_y = j5_y
+        end_z = j5_z + self.link5_length * math.sin(total_angle_4_5)
+
+
+        # Create bone connections
+        links = [
+            [(base_x, base_y, base_z), (j1_x, j1_y, j1_z)],      # Base to Joint 1
+            [(j1_x, j1_y, j1_z), (j2_x, j2_y, j2_z)],            # Joint 1 to Joint 2
+            [(j2_x, j2_y, j2_z), (j3_x, j3_y, j3_z)],            # Joint 2 to Joint 3
+            [(j3_x, j3_y, j3_z), (j4_x, j4_y, j4_z)],            # Joint 3 to Joint 4
+            [(j4_x, j4_y, j4_z), (j5_x, j5_y, j5_z)],            # Joint 4 to Joint 5
+            [(j5_x, j5_y, j5_z), (end_x, end_y, end_z)],        # Joint 5 to End
+        ]
+
+        # Transform to world coordinates
+        transformed_links = []
+        for link in links:
+            transformed_link = []
+            for point in link:
+                x, y, z = point
+
+                cos_o = math.cos(self.orientation)
+                sin_o = math.sin(self.orientation)
+                rotated_x = x * cos_o - y * sin_o
+                rotated_y = x * sin_o + y * cos_o
+
+                world_pos = Vector3(
+                    rotated_x + self.position.x,
+                    rotated_y + self.position.y,
+                    z + self.position.z
+                )
+                transformed_link.append(world_pos)
+
+            transformed_links.append(transformed_link)
+
+        return transformed_links
+
+    def get_gripper_vertices(self):
+        """Get gripper vertices"""
+        if self.gripper_open < 0.1:
+            return []
+
+        manipulator_links = self.get_manipulator_vertices()
+        if not manipulator_links:
+            return []
+
+        end_pos = manipulator_links[-1][-1]
+
+        # Gripper fingers
+        gripper_length = 0.05
+        gripper_width = self.gripper_width * self.gripper_open
+
+        # Left finger
+        left_finger = [
+            Vector3(end_pos.x - gripper_width/2, end_pos.y, end_pos.z),
+            Vector3(end_pos.x - gripper_width/2, end_pos.y, end_pos.z + gripper_length),
+            Vector3(end_pos.x - gripper_width/4, end_pos.y, end_pos.z + gripper_length),
+            Vector3(end_pos.x - gripper_width/4, end_pos.y, end_pos.z),
+        ]
+
+        # Right finger
+        right_finger = [
+            Vector3(end_pos.x + gripper_width/4, end_pos.y, end_pos.z),
+            Vector3(end_pos.x + gripper_width/4, end_pos.y, end_pos.z + gripper_length),
+            Vector3(end_pos.x + gripper_width/2, end_pos.y, end_pos.z + gripper_length),
+            Vector3(end_pos.x + gripper_width/2, end_pos.y, end_pos.z),
+        ]
+
+        return left_finger + right_finger
+
+    def simulate_sensors(self, obstacles=None):
+        """Simulate sensor readings"""
+        sensor_readings = {
+            'ultrasonic_front': 2.5,
+            'ultrasonic_rear': 2.5,
+            'infrared_left': 0.8,
+            'infrared_right': 0.8
+        }
+        return sensor_readings
+
+    def reset(self):
+        """Reset robot to initial state"""
+        self.position = Vector3(0.0, 0.0, 0.0)
+        self.orientation = 0.0
+        self.linear_velocity = 0.0
+        self.angular_velocity = 0.0
+        self.joint1_angle = 0.0
+        self.joint2_angle = 0.0
+        self.joint3_angle = 0.0
+        self.joint4_angle = 0.0
+        self.joint5_angle = 0.0
+        self.gripper_open = 0.0
+        self.left_track_position = 0.0
+        self.right_track_position = 0.0
+
+class InputController:
+    def __init__(self, gui_callback=None):
+        self.gui_callback = gui_callback
+        self.running = False
+        self.linear_velocity = 0.0
+        self.angular_velocity = 0.0
+        self.max_linear_vel = 2.0
+        self.max_angular_vel = 3.14
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+    def get_control_status(self):
+        return {'mode': 'keyboard', 'linear_velocity': self.linear_velocity, 'angular_velocity': self.angular_velocity}
 
 class FullyIntegratedRobotGUI:
     def __init__(self):
@@ -1721,21 +1736,88 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
         
     # Control functions
     def connect_robot(self):
-        """Connect to robot"""
-        if self.simulation_mode:
-            self.add_log("Simulation mode - no physical connection needed")
-            self.connected = True
-            self.update_connection_status()
-            return
-            
-        if self.ros_manager:
-            namespace = self.robot_namespace.get()
-            if self.ros_manager.get_interface():
-                success = self.ros_manager.get_interface().connect(namespace)
-                if success:
-                    self.add_log(f"Connected to robot: {namespace}")
+        """Connect to robot with mode selection dialog"""
+        # Create connection dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Select Connection Mode")
+        dialog.geometry("400x300")
+        dialog.configure(bg=self.colors['panel_bg'])
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Center dialog
+        dialog.update_idletasks()
+        x = (self.root.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (self.root.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        # Title
+        Label(dialog, text="Select Connection Mode", bg=self.colors['panel_bg'],
+               fg=self.colors['accent_dark'], font=self.header_font).pack(pady=20)
+
+        # Mode selection
+        mode_var = tk.StringVar(value="simulation")
+
+        def on_connect():
+            mode = mode_var.get()
+            dialog.destroy()
+
+            if mode == "simulation":
+                self.simulation_mode = True
+                self.add_log("Simulation mode activated")
+                self.connected = True
+                self.update_connection_status()
+
+            elif mode == "raspberry_pi":
+                # Try to load GPIO interface
+                if load_gpio_interface():
+                    self.simulation_mode = False
+                    self.add_log("Raspberry Pi mode activated - GPIO loaded")
+                    self.connected = True
+                    self.update_connection_status()
                 else:
-                    self.add_log(f"Failed to connect to robot: {namespace}")
+                    self.simulation_mode = True
+                    self.add_log("GPIO not available - falling back to simulation mode")
+                    self.connected = True
+                    self.update_connection_status()
+
+            elif mode == "ros2":
+                self.simulation_mode = False
+                if self.ros_manager:
+                    namespace = self.robot_namespace.get()
+                    if self.ros_manager.get_interface():
+                        success = self.ros_manager.get_interface().connect(namespace)
+                        if success:
+                            self.add_log(f"Connected to ROS2 robot: {namespace}")
+                            self.connected = True
+                        else:
+                            self.add_log(f"Failed to connect to ROS2 robot: {namespace}")
+                            self.simulation_mode = True
+                else:
+                    self.add_log("ROS2 not available - falling back to simulation")
+                    self.simulation_mode = True
+                self.update_connection_status()
+
+        # Radio buttons
+        modes_frame = Frame(dialog, bg=self.colors['panel_bg'])
+        modes_frame.pack(pady=20)
+
+        Radiobutton(modes_frame, text="Simulation Mode (No Hardware)", variable=mode_var,
+                   value="simulation", bg=self.colors['panel_bg'], fg=self.colors['text'],
+                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
+
+        Radiobutton(modes_frame, text="Raspberry Pi (GPIO Direct)", variable=mode_var,
+                   value="raspberry_pi", bg=self.colors['panel_bg'], fg=self.colors['text'],
+                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
+
+        Radiobutton(modes_frame, text="ROS2 Network", variable=mode_var,
+                   value="ros2", bg=self.colors['panel_bg'], fg=self.colors['text'],
+                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
+
+        # Connect button
+        Button(dialog, text="Connect", command=on_connect,
+               bg=self.colors['success'], fg=self.colors['success_dark'],
+               font=self.default_font, width=15, relief=tk.FLAT, bd=0).pack(pady=20)
                     
     def disconnect_robot(self):
         """Disconnect from robot"""
