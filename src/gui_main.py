@@ -492,6 +492,8 @@ class FullyIntegratedRobotGUI:
         self.wifi_socket = None
         self.ssh_client = None
         self.joint_sliders = []
+        self.robot_ip_var = StringVar(value="192.168.1.100")
+        self.connection_mode_var = StringVar(value="simulation")
         
         # Initialize hardware manager
         try:
@@ -1235,15 +1237,27 @@ class FullyIntegratedRobotGUI:
         Label(conn_frame, text="ROBOT CONNECTION", bg=self.colors['panel_bg'],
                fg=self.colors['accent_dark'], font=self.default_font).pack(anchor=tk.W)
 
-        # Namespace input
-        ns_frame = Frame(conn_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
-        ns_frame.pack(fill=tk.X, pady=5)
+        # IP address input
+        ip_frame = Frame(conn_frame, bg=self.colors['grid'], relief=tk.FLAT, bd=0)
+        ip_frame.pack(fill=tk.X, pady=5)
 
-        Label(ns_frame, text="Namespace:", bg=self.colors['grid'],
+        Label(ip_frame, text="Robot IP:", bg=self.colors['grid'],
                fg=self.colors['text'], font=self.default_font).pack(side=tk.LEFT, padx=10, pady=5)
 
-        Entry(ns_frame, textvariable=self.robot_namespace, bg=self.colors['panel_bg'],
+        Entry(ip_frame, textvariable=self.robot_ip_var, bg=self.colors['panel_bg'],
               fg=self.colors['text'], font=self.default_font, relief=tk.FLAT, bd=0).pack(side=tk.LEFT, padx=5, pady=5)
+
+        # Mode selection
+        mode_frame = Frame(conn_frame, bg=self.colors['panel_bg'])
+        mode_frame.pack(fill=tk.X, pady=5)
+
+        Radiobutton(mode_frame, text="WiFi Connection", variable=self.connection_mode_var,
+                   value="wifi", bg=self.colors['panel_bg'], fg=self.colors['text'],
+                   font=self.default_font, selectcolor=self.colors['accent']).pack(side=tk.LEFT, padx=10)
+
+        Radiobutton(mode_frame, text="Simulation Mode", variable=self.connection_mode_var,
+                   value="simulation", bg=self.colors['panel_bg'], fg=self.colors['text'],
+                   font=self.default_font, selectcolor=self.colors['accent']).pack(side=tk.LEFT, padx=10)
 
         # Control buttons
         button_frame = Frame(conn_frame, bg=self.colors['panel_bg'])
@@ -1776,85 +1790,38 @@ Q/E: J1 | R/F: J2 | T/G: J3 | Y/H: J4 | U/I: J5 | Z/X: Gripper | C: Home | ESC: 
         
     # Control functions
     def connect_robot(self):
-        """Connect to robot via WiFi IP"""
-        # Create simple connection dialog
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Connect to Robot")
-        dialog.geometry("350x250")
-        dialog.configure(bg=self.colors['panel_bg'])
-        dialog.transient(self.root)
-        dialog.grab_set()
+        """Connect to robot using IP from GUI field"""
+        mode = self.connection_mode_var.get()
+        ip = self.robot_ip_var.get()
 
-        # Center dialog
-        dialog.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (self.root.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
+        if mode == "simulation":
+            self.simulation_mode = True
+            self.add_log("Simulation mode activated")
+            self.connected = True
+            self.update_connection_status()
 
-        # Title
-        Label(dialog, text="Connect to Robot", bg=self.colors['panel_bg'],
-               fg=self.colors['accent_dark'], font=self.header_font).pack(pady=20)
-
-        # IP address input
-        ip_frame = Frame(dialog, bg=self.colors['panel_bg'])
-        ip_frame.pack(pady=10)
-
-        Label(ip_frame, text="Robot IP Address:", bg=self.colors['panel_bg'],
-               fg=self.colors['text'], font=self.default_font).pack(anchor=tk.W)
-
-        ip_var = StringVar(value="192.168.1.100")
-        Entry(ip_frame, textvariable=ip_var, bg=self.colors['grid'], fg=self.colors['text'],
-              font=self.default_font, width=25, relief=tk.FLAT, bd=0).pack(pady=5)
-
-        # Mode selection
-        mode_var = tk.StringVar(value="wifi")
-
-        Radiobutton(ip_frame, text="WiFi Connection", variable=mode_var,
-                   value="wifi", bg=self.colors['panel_bg'], fg=self.colors['text'],
-                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
-
-        Radiobutton(ip_frame, text="Simulation Mode", variable=mode_var,
-                   value="simulation", bg=self.colors['panel_bg'], fg=self.colors['text'],
-                   font=self.default_font, selectcolor=self.colors['accent']).pack(anchor=tk.W, pady=5)
-
-        def on_connect():
-            mode = mode_var.get()
-            ip = ip_var.get()
-            dialog.destroy()
-
-            if mode == "simulation":
-                self.simulation_mode = True
-                self.add_log("Simulation mode activated")
+        elif mode == "wifi":
+            self.simulation_mode = False
+            self.robot_ip = ip
+            self.add_log(f"Connecting to robot at {ip}...")
+            try:
+                # Connect via socket
+                self.wifi_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.wifi_socket.settimeout(5.0)
+                self.wifi_socket.connect((ip, 5000))
+                self.add_log(f"Connected to robot at {ip}")
                 self.connected = True
                 self.update_connection_status()
 
-            elif mode == "wifi":
-                self.simulation_mode = False
-                self.robot_ip = ip
-                self.add_log(f"Connecting to robot at {ip}...")
-                try:
-                    # Connect via socket
-                    self.wifi_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    self.wifi_socket.settimeout(5.0)
-                    self.wifi_socket.connect((ip, 5000))
-                    self.add_log(f"Connected to robot at {ip}")
-                    self.connected = True
-                    self.update_connection_status()
-
-                    # Start telemetry receive thread
-                    telemetry_thread = threading.Thread(target=self._receive_telemetry, daemon=True)
-                    telemetry_thread.start()
-                except Exception as e:
-                    self.add_log(f"Failed to connect: {e}")
-                    self.simulation_mode = True
-                    self.add_log("Falling back to simulation mode")
-                    self.connected = True
-                    self.update_connection_status()
-
-        # Connect button
-        Button(dialog, text="Connect", command=on_connect,
-               bg=self.colors['success'], fg=self.colors['success_dark'],
-               font=self.default_font, width=15, relief=tk.FLAT, bd=0).pack(pady=20)
+                # Start telemetry receive thread
+                telemetry_thread = threading.Thread(target=self._receive_telemetry, daemon=True)
+                telemetry_thread.start()
+            except Exception as e:
+                self.add_log(f"Failed to connect: {e}")
+                self.simulation_mode = True
+                self.add_log("Falling back to simulation mode")
+                self.connected = True
+                self.update_connection_status()
                     
     def disconnect_robot(self):
         """Disconnect from robot"""
