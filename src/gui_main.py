@@ -712,6 +712,10 @@ class FullyIntegratedRobotGUI:
         
         # Focus to receive keyboard events
         self.root.focus_set()
+
+        # Ensure focus when window is clicked
+        self.root.bind('<Button-1>', lambda e: self.root.focus_set())
+        self.root.bind('<FocusIn>', lambda e: self.root.focus_set())
         
     def on_key_press(self, key):
         """Handle key press events"""

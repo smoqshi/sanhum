@@ -97,11 +97,13 @@ class RobotSimulation:
         self.linear_velocity = max(-self.max_linear_vel, min(self.max_linear_vel, linear))
         self.angular_velocity = max(-self.max_angular_vel, min(self.max_angular_vel, angular))
         
-    def set_manipulator_joints(self, joint1, joint2, joint3, gripper):
+    def set_manipulator_joints(self, joint1, joint2, joint3, joint4, joint5, gripper):
         """Set manipulator joint angles"""
         self.joint1_angle = joint1
         self.joint2_angle = joint2
         self.joint3_angle = joint3
+        self.joint4_angle = joint4
+        self.joint5_angle = joint5
         self.gripper_open = max(0.0, min(1.0, gripper))
         
     def get_chassis_vertices(self):
